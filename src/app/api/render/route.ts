@@ -12,9 +12,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
  * 4. Wait for project analysis
  * 5. Create manual template with layer bindings
  * 6. Start render with user parameters
- * 7. Wait for render completion
- * 8. Upload to R2 and update job
- * 9. Cleanup Plainly project
+ * 7. Return immediately, client polls for status
  */
 
 export async function POST(request: NextRequest) {
@@ -23,6 +21,12 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const { templateId, userId, parameters } = body;
+
+        console.log("Render request received:", {
+            templateId,
+            userId,
+            parameters
+        });
 
         if (!templateId || !userId) {
             return NextResponse.json(
@@ -76,7 +80,6 @@ export async function POST(request: NextRequest) {
             template.source_url
         );
 
-        // Validate we got a project ID
         if (!project || !project.id) {
             throw new Error("Failed to get project ID from Plainly");
         }
@@ -84,13 +87,13 @@ export async function POST(request: NextRequest) {
         plainlyProjectId = project.id;
         console.log("Plainly project created with ID:", plainlyProjectId);
 
-        // Store project ID immediately in case of later failure
+        // Store project ID immediately
         await supabaseAdmin
             .from("render_jobs")
             .update({ plainly_project_id: project.id })
             .eq("id", renderJob.id);
 
-        // Step 4: Wait for project to be ready (analysis complete)
+        // Step 4: Wait for project analysis
         console.log("Waiting for project analysis to complete...");
         await plainlyClient.waitForProject(project.id);
         console.log("Project is ready for rendering");
@@ -108,14 +111,20 @@ export async function POST(request: NextRequest) {
         );
 
         // Step 6: Start render with user parameters
-        // Parameters should be keyed by placeholder key (e.g., { img1: "url", text1: "text" })
+        console.log("Starting render with:", {
+            projectId: project.id,
+            templateId: plainlyTemplate.id,
+            parameters: parameters || {},
+            isSameId: project.id === plainlyTemplate.id
+        });
+
         const render = await plainlyClient.startRender(
             project.id,
             plainlyTemplate.id,
             parameters || {}
         );
 
-        // Update job with Plainly render ID and project ID (for cleanup)
+        // Update job with Plainly render ID and project ID
         await supabaseAdmin
             .from("render_jobs")
             .update({
@@ -124,8 +133,6 @@ export async function POST(request: NextRequest) {
             })
             .eq("id", renderJob.id);
 
-        // Step 7: Wait for render completion (async in background)
-        // For now, return immediately and let client poll for status
         return NextResponse.json({
             success: true,
             renderJobId: renderJob.id,

@@ -43,6 +43,8 @@ interface MetaItem {
     type: string;  // "COMPOSITION", "MEDIA", "TEXT"
     mediaType?: string;  // "IMAGE", "VIDEO", "AUDIO", "SOLID"
     children?: MetaItem[];
+    // Flattened metadata includes parent composition paths
+    compositions?: { name: string; id: number; internalId: string }[];
 }
 
 class PlainlyClient {
@@ -191,49 +193,50 @@ class PlainlyClient {
 
         console.log("Render composition:", { name: renderingComposition, id: renderingCompositionId });
 
-        // Build LAYERS array (not parameters!) - this is what Plainly expects
+        // Use LAYERS API to create actual parametrization on layers
+        // Valid layerTypes: COMPOSITION, DATA, DATA_EFFECT, MEDIA, SOLID_COLOR
+        // For text layers, we use DATA type with sourceText property
         const layers: any[] = [];
 
-        // Add image layers
+        // Log all available layers for debugging (with parent compositions)
+        const mediaLayers = metadata.filter(m => m.type === "MEDIA");
+        const textLayers = metadata.filter(m => m.type === "TEXT");
+        console.log("Available MEDIA layers:", mediaLayers.map(m => ({
+            name: m.name,
+            id: m.internalId,
+            parentComps: m.compositions?.map(c => c.name) || []
+        })));
+        console.log("Available TEXT layers:", textLayers.map(m => ({
+            name: m.name,
+            id: m.internalId,
+            parentComps: m.compositions?.map(c => c.name) || []
+        })));
+
+        // Add image layers (MEDIA type)
         for (const img of imagePlaceholders) {
-            // Find layer with matching name that is MEDIA type
             const imgLayer = metadata.find(
-                (m) => m.type === "MEDIA" && m.name.toLowerCase() === img.key.toLowerCase()
+                (m) => m.type === "MEDIA" && m.name.trim().toLowerCase() === img.key.trim().toLowerCase()
             );
 
             if (imgLayer) {
-                console.log(`Found image layer: ${imgLayer.name} (internalId: ${imgLayer.internalId})`);
+                // Log full layer info for debugging
+                console.log(`✅ Found image layer: ${imgLayer.name}`, {
+                    internalId: imgLayer.internalId,
+                    compositions: imgLayer.compositions
+                });
 
-                // Find the composition this layer belongs to
-                // The img1 layer should be inside img1 composition
-                const parentComp = metadata.find(
-                    (m) => m.type === "COMPOSITION" && m.name.toLowerCase() === img.key.toLowerCase()
-                );
-
-                const layerIdNum = parseInt(imgLayer.internalId, 10);
-
-                layers.push({
-                    internalId: layerIdNum,
+                // Build MEDIA layer
+                const layer: any = {
+                    internalId: parseInt(imgLayer.internalId, 10),
                     layerName: imgLayer.name,
                     layerType: "MEDIA",
-                    mediaType: "image",
-                    label: img.key,
+                    mediaType: "image",  // Required for MEDIA layers
+                    label: img.key,      // Required: label for the parameter
                     parametrization: {
+                        key: img.key,
+                        value: `#${img.key}`,  // Required: expression value
                         expression: true,
-                        value: `#${img.key}`,  // Parameter key with # prefix
-                        type: "mediaAutoScale",
-                        scaleToFit: true,
-                        forceFill: false,
-                        scaleToComposition: true,
-                        fixedRatio: true,
                     },
-                    compositions: parentComp ? [{
-                        name: parentComp.name,
-                        id: parseInt(parentComp.internalId, 10),
-                    }] : [{
-                        name: renderingComposition,
-                        id: renderingCompositionId,
-                    }],
                     scripts: [{
                         name: "Media auto scale",
                         type: "mediaAutoScale",
@@ -242,39 +245,61 @@ class PlainlyClient {
                             fixedRatio: true,
                         }
                     }],
-                });
+                };
+
+                // Add compositions - REQUIRED for all layers
+                if (imgLayer.compositions && imgLayer.compositions.length > 0) {
+                    layer.compositions = imgLayer.compositions.map((c: any) => ({
+                        name: c.name,
+                        id: parseInt(c.internalId || String(c.id), 10),
+                    }));
+                } else {
+                    // Fallback: use the main render composition
+                    layer.compositions = [{
+                        name: renderingComposition,
+                        id: renderingCompositionId,
+                    }];
+                }
+
+                layers.push(layer);
             } else {
-                console.warn(`Image layer not found: ${img.key}`);
+                console.warn(`❌ Image layer not found: ${img.key}`);
             }
         }
 
-        // Add text layers
+        // Add text layers (use DATA type for text source)
         for (const txt of textPlaceholders) {
             const textLayer = metadata.find(
-                (m) => m.type === "TEXT" && m.name.toLowerCase() === txt.key.toLowerCase()
+                (m) => m.type === "TEXT" && m.name.trim().toLowerCase() === txt.key.trim().toLowerCase()
             );
 
             if (textLayer) {
-                console.log(`Found text layer: ${textLayer.name} (internalId: ${textLayer.internalId})`);
-                const layerIdNum = parseInt(textLayer.internalId, 10);
+                console.log(`✅ Found text layer: ${textLayer.name} (internalId: ${textLayer.internalId})`);
 
-                layers.push({
-                    internalId: layerIdNum,
+                const layer: any = {
+                    internalId: parseInt(textLayer.internalId, 10),
                     layerName: textLayer.name,
-                    layerType: "TEXT",
-                    label: txt.key,
+                    layerType: "DATA",           // Text layers use DATA type in layers API
+                    propertyName: "Source Text", // Required: propertyName (not property)
+                    label: txt.key,              // Required: label for the parameter
                     parametrization: {
+                        key: txt.key,
+                        value: `#${txt.key}`,    // Required: expression value
                         expression: true,
-                        value: `#${txt.key}`,
-                        type: "text",
                     },
-                    compositions: [{
-                        name: renderingComposition,
-                        id: renderingCompositionId,
-                    }],
-                });
+                };
+
+                // Add compositions path if available
+                if (textLayer.compositions && textLayer.compositions.length > 0) {
+                    layer.compositions = textLayer.compositions.map(c => ({
+                        name: c.name,
+                        id: c.id || parseInt(c.internalId, 10),
+                    }));
+                }
+
+                layers.push(layer);
             } else {
-                console.warn(`Text layer not found: ${txt.key}`);
+                console.warn(`❌ Text layer not found: ${txt.key}`);
             }
         }
 
@@ -284,7 +309,7 @@ class PlainlyClient {
             name: templateName,
             renderingComposition: renderingComposition,
             renderingCompositionId: renderingCompositionId,
-            layers,  // Use 'layers' not 'parameters'
+            layers,  // Use 'layers' to create actual parametrization
         };
 
         console.log("Template creation request:", JSON.stringify(requestBody, null, 2));
