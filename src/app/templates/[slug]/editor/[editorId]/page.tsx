@@ -217,9 +217,14 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 ...prev,
                                 [currentKey]: data.url
                             }));
+                        } else {
+                            throw new Error(data.error || "Upload failed");
                         }
                     } catch (err) {
                         console.error("Upload fetch error:", err);
+                        alert(`Failed to upload ${currentKey}. Please try again.`);
+                        // Reset image on failure so it doesn't get stuck in base64/uploading state
+                        setImages(prev => ({ ...prev, [currentKey]: null }));
                     } finally {
                         setUploadingKeys(prev => {
                             const next = new Set(prev);
@@ -402,10 +407,10 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                     </Link>
                     <div className="hidden xs:block h-4 w-[1px] bg-white/10 shrink-0" />
                     <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                        <span className="text-white font-semibold truncate text-sm md:text-base">
+                        <span className="text-white font-semibold truncate text-sm md:text-base hidden sm:block">
                             {template.title}
                         </span>
-                        <span className="hidden sm:inline-block text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded text-gray-400 shrink-0">Draft</span>
+                        <span className="hidden lg:inline-block text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded text-gray-400 shrink-0">Draft</span>
                     </div>
                 </div>
 
