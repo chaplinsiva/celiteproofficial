@@ -36,29 +36,35 @@ interface Template {
     text_placeholders: TextPlaceholder[];
 }
 
-// Parse aspect ratio string to number and dimensions (supports "16:9", "1920x1080", etc.)
+// Parse aspect ratio string to number and dimensions (supports "16:9", "1890:745", "1920x1080", etc.)
 function parseAspectRatio(ratio: string): { ratio: number; width: number; height: number } {
-    if (!ratio) return { ratio: 1, width: 1920, height: 1920 };
+    if (!ratio) return { ratio: 1, width: 1920, height: 1080 };
 
     // Handle "widthxheight" format (e.g., "1920x1080")
     if (ratio.toLowerCase().includes("x")) {
         const [w, h] = ratio.toLowerCase().split("x").map(Number);
-        return { ratio: w / h || 1, width: w || 1920, height: h || 1920 };
+        return { ratio: (w / h) || 1, width: w || 1920, height: h || 1080 };
     }
 
-    // Handle "width:height" format (e.g., "16:9")
+    // Handle "width:height" format (e.g., "16:9" or "1890:745")
     if (ratio.includes(":")) {
         const [w, h] = ratio.split(":").map(Number);
-        // For ratio format, calculate dimensions maintaining aspect ratio with max 1920
-        const r = w / h || 1;
+        const r = (w / h) || 1;
+
+        // If the numbers look like actual pixel dimensions (at least one > 100), use them directly
+        if (w > 100 || h > 100) {
+            return { ratio: r, width: w, height: h };
+        }
+
+        // Otherwise treat as a simple ratio and scale to reasonable HD dimensions
         if (r >= 1) {
             return { ratio: r, width: 1920, height: Math.round(1920 / r) };
         } else {
-            return { ratio: r, width: Math.round(1920 * r), height: 1920 };
+            return { ratio: r, width: Math.round(1080 * r), height: 1080 };
         }
     }
 
-    return { ratio: 1, width: 1920, height: 1920 };
+    return { ratio: 1, width: 1920, height: 1080 };
 }
 
 export default function Editor({ params }: { params: Promise<{ slug: string; editorId: string }> }) {

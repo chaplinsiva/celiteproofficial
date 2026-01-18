@@ -45,12 +45,13 @@ const Header = () => {
             </span>
           </Link>
 
-          {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-8">
-            <Link href="#" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Features</Link>
+            <Link href="/" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Home</Link>
             <Link href="/templates" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Templates</Link>
+            {user && (
+              <Link href="/dashboard" className="text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors">My Dashboard</Link>
+            )}
             <Link href="#" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Pricing</Link>
-            <Link href="#" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Docs</Link>
           </div>
 
           <div className="hidden md:flex items-center gap-4">
@@ -105,10 +106,14 @@ const Header = () => {
           className="md:hidden mx-4 mt-2 p-4 bg-black/95 backdrop-blur-2xl border border-white/10 rounded-2xl"
         >
           <div className="flex flex-col gap-4">
-            <Link href="#" className="text-gray-400 hover:text-white text-sm">Features</Link>
-            <Link href="#" className="text-gray-400 hover:text-white text-sm">Templates</Link>
-            <Link href="#" className="text-gray-400 hover:text-white text-sm">Pricing</Link>
-            <Link href="#" className="text-gray-400 hover:text-white text-sm">Docs</Link>
+            <Link href="/" className="text-gray-400 hover:text-white text-sm" onClick={() => setIsOpen(false)}>Home</Link>
+            <Link href="/templates" className="text-gray-400 hover:text-white text-sm" onClick={() => setIsOpen(false)}>Templates</Link>
+            {user && (
+              <Link href="/dashboard" className="text-indigo-400 hover:text-indigo-300 text-sm font-bold" onClick={() => setIsOpen(false)}>
+                My Dashboard
+              </Link>
+            )}
+            <Link href="#" className="text-gray-400 hover:text-white text-sm" onClick={() => setIsOpen(false)}>Pricing</Link>
             <hr className="border-white/10" />
             {user ? (
               <>
