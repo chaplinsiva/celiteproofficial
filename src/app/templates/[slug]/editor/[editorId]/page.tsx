@@ -247,12 +247,22 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
             return;
         }
 
-        // Check if all required images are uploaded
-        const missingImages = template.image_placeholders?.filter(
-            (p) => !images[p.key] || !images[p.key]?.startsWith("http")
-        );
+        // 1. Check if any uploads are still in progress
+        if (uploadingKeys.size > 0) {
+            alert("Please wait for your assets to finish uploading to the cloud.");
+            return;
+        }
+
+        // 2. Check if all required images are uploaded and are remote URLs (not base64)
+        const missingImages = template.image_placeholders?.filter(p => !images[p.key]);
         if (missingImages?.length > 0) {
-            alert(`Please upload: ${missingImages.map((p) => p.label).join(", ")}`);
+            alert(`Please upload: ${missingImages.map(p => p.label).join(", ")}`);
+            return;
+        }
+
+        const stillBase64 = template.image_placeholders?.filter(p => images[p.key]?.startsWith("data:"));
+        if (stillBase64?.length > 0) {
+            alert("Some assets are still synchronizing. Please wait a moment.");
             return;
         }
 
@@ -385,31 +395,39 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
             </AnimatePresence>
 
             {/* Header */}
-            <header className="h-16 border-b border-white/5 bg-black/40 flex items-center justify-between px-6 shrink-0 z-10">
-                <div className="flex items-center gap-6">
-                    <Link href={`/templates/${slug}`} className="hover:text-white transition-colors">
-                        <ArrowLeft className="w-5 h-5" />
+            <header className="h-16 border-b border-white/5 bg-black/40 flex items-center justify-between px-4 md:px-6 shrink-0 z-10">
+                <div className="flex items-center gap-3 md:gap-6 min-w-0">
+                    <Link href={`/templates/${slug}`} className="p-2 hover:bg-white/5 rounded-lg transition-all shrink-0">
+                        <ArrowLeft className="w-5 h-5 text-gray-400 group-hover:text-white" />
                     </Link>
-                    <div className="h-4 w-[1px] bg-white/10" />
-                    <div className="flex items-center gap-3">
-                        <span className="text-white font-semibold">{template.title}</span>
-                        <span className="text-xs bg-white/5 border border-white/10 px-2 py-0.5 rounded text-gray-400">Draft</span>
+                    <div className="hidden xs:block h-4 w-[1px] bg-white/10 shrink-0" />
+                    <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                        <span className="text-white font-semibold truncate text-sm md:text-base">
+                            {template.title}
+                        </span>
+                        <span className="hidden sm:inline-block text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded text-gray-400 shrink-0">Draft</span>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2 hover:bg-white/5 rounded-lg text-sm transition-colors">
+                <div className="flex items-center gap-2 md:gap-3">
+                    <button className="hidden sm:flex items-center gap-2 px-4 py-2 hover:bg-white/5 rounded-lg text-sm transition-colors shrink-0">
                         <Save className="w-4 h-4" /> Save
                     </button>
                     <button
                         onClick={handleRender}
-                        disabled={isRendering}
-                        className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all disabled:opacity-50"
+                        disabled={isRendering || uploadingKeys.size > 0}
+                        className="flex items-center gap-2 px-4 md:px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs md:text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     >
                         {isRendering ? (
                             <><Loader2 className="w-4 h-4 animate-spin" /> Rendering...</>
                         ) : (
-                            <><Download className="w-4 h-4" /> Render Video</>
+                            <>
+                                {uploadingKeys.size > 0 ? (
+                                    <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
+                                ) : (
+                                    <><Download className="w-4 h-4" /> Render</>
+                                )}
+                            </>
                         )}
                     </button>
                 </div>
