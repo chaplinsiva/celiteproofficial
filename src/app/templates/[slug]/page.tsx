@@ -168,11 +168,11 @@ export default function TemplateDetail({ params }: { params: Promise<{ slug: str
                             <span>{template.category}</span>
                         </div>
 
-                        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
+                        <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 leading-tight">
                             {template.title}
                         </h1>
 
-                        <p className="text-gray-400 text-lg mb-10 leading-relaxed">
+                        <p className="text-gray-500 md:text-gray-400 text-base md:text-lg mb-10 leading-relaxed">
                             {template.description || "Elevate your brand with this high-quality motion graphic template. Fully customizable layers and brand-matching."}
                         </p>
 

@@ -114,22 +114,22 @@ export default function Dashboard() {
 
             <div className="max-w-7xl mx-auto px-6 py-12">
                 {/* User Profile Summary */}
-                <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
-                    <div>
-                        <h1 className="text-3xl font-bold text-white mb-2">My Account</h1>
-                        <p className="text-gray-500">Manage your renders and account settings.</p>
+                <div className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                    <div className="text-center md:text-left">
+                        <h1 className="text-2xl md:text-4xl font-bold text-white mb-2">My Account</h1>
+                        <p className="text-sm md:text-base text-gray-500">Manage your renders and account settings.</p>
                     </div>
 
                     {user && (
-                        <div className="flex items-center gap-4 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                            <div className="w-12 h-12 bg-indigo-600/20 rounded-full flex items-center justify-center">
-                                <User className="w-6 h-6 text-indigo-400" />
+                        <div className="flex items-center gap-4 p-4 bg-white/[0.02] border border-white/5 rounded-2xl w-full md:w-auto">
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-indigo-600/20 rounded-full flex items-center justify-center shrink-0">
+                                <User className="w-5 h-5 md:w-6 md:h-6 text-indigo-400" />
                             </div>
-                            <div>
-                                <div className="text-sm font-bold text-white uppercase tracking-wider">
+                            <div className="min-w-0 text-left">
+                                <div className="text-xs md:text-sm font-bold text-white uppercase tracking-wider truncate">
                                     {user.user_metadata?.full_name || "User Account"}
                                 </div>
-                                <div className="text-xs text-gray-500">{user.email}</div>
+                                <div className="text-[10px] md:text-xs text-gray-500 truncate">{user.email}</div>
                             </div>
                         </div>
                     )}

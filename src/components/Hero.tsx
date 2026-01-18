@@ -23,14 +23,14 @@ const Hero = () => {
                         <span>AI-Powered Video Automation</span>
                     </div>
 
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white mb-6">
+                    <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-white mb-6">
                         Automate Your <br />
                         <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
                             Video Workflow
                         </span>
                     </h1>
 
-                    <p className="max-w-2xl mx-auto text-lg text-gray-400 mb-10 leading-relaxed">
+                    <p className="max-w-2xl mx-auto text-base md:text-lg text-gray-400 mb-10 leading-relaxed px-4">
                         Create professional videos in seconds with our automated editing engine.
                         Connect your data, pick a template, and let CelitePro do the rest.
                     </p>

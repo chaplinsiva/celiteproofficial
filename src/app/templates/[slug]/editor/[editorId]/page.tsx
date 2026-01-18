@@ -293,7 +293,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
     const secondTextKey = template.text_placeholders?.[1]?.key;
 
     return (
-        <main className="h-screen bg-[#070708] flex flex-col overflow-hidden text-gray-300 relative">
+        <main className="min-h-screen lg:h-screen bg-[#070708] flex flex-col overflow-x-hidden lg:overflow-hidden text-gray-300 relative">
             {/* Cropper Modal */}
             <AnimatePresence>
                 {showCropper && (
@@ -389,31 +389,31 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 </div>
             </header>
 
-            <div className="flex flex-1 overflow-hidden">
-                {/* Sidebar */}
-                <aside className="w-16 border-r border-white/5 bg-black/20 flex flex-col items-center py-6 gap-6 shrink-0">
+            <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden">
+                {/* Sidebar - Horizontal on mobile, Vertical on desktop */}
+                <aside className="w-full lg:w-16 border-b lg:border-r lg:border-b-0 border-white/5 bg-black/20 flex lg:flex-col items-center justify-center lg:justify-start py-3 lg:py-6 gap-6 shrink-0 z-20">
                     <button className="p-3 text-indigo-400 bg-indigo-500/10 rounded-xl"><Layers className="w-5 h-5" /></button>
                     <button className="p-3 hover:bg-white/5 rounded-xl"><Type className="w-5 h-5" /></button>
                     <button className="p-3 hover:bg-white/5 rounded-xl"><LucideImage className="w-5 h-5" /></button>
-                    <div className="flex-1" />
+                    <div className="hidden lg:block lg:flex-1" />
                     <button className="p-3 hover:bg-white/5 rounded-xl"><Settings className="w-5 h-5" /></button>
                 </aside>
 
-                <div className="flex-1 flex overflow-hidden">
+                <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
                     {/* Canvas Preview */}
-                    <div className="flex-1 bg-black flex items-center justify-center p-12 relative">
+                    <div className="w-full lg:flex-1 bg-black flex items-center justify-center p-6 lg:p-12 relative min-h-[300px] lg:min-h-0">
                         <div className="aspect-video w-full max-w-4xl bg-[#0F0F11] border border-white/10 rounded-2xl shadow-2xl relative overflow-hidden flex flex-col items-center justify-center group">
                             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5" />
 
                             {firstImageKey && images[firstImageKey] ? (
-                                <div className="relative z-10 flex flex-col items-center gap-8 text-center px-12">
-                                    <img src={images[firstImageKey]!} alt="User Upload" className="w-32 h-32 object-contain" />
+                                <div className="relative z-10 flex flex-col items-center gap-4 lg:gap-8 text-center px-6 lg:px-12">
+                                    <img src={images[firstImageKey]!} alt="User Upload" className="w-20 h-20 lg:w-32 lg:h-32 object-contain" />
                                     <div>
-                                        <h2 className="text-5xl font-bold text-white tracking-tight">
+                                        <h2 className="text-2xl lg:text-5xl font-bold text-white tracking-tight">
                                             {firstTextKey ? texts[firstTextKey] : "Your Title"}
                                         </h2>
                                         {secondTextKey && (
-                                            <p className="text-gray-500 mt-2 font-medium tracking-widest uppercase text-sm">
+                                            <p className="text-[10px] lg:text-sm text-gray-500 mt-1 lg:mt-2 font-medium tracking-widest uppercase">
                                                 {texts[secondTextKey]}
                                             </p>
                                         )}
@@ -421,26 +421,26 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center gap-4 text-white/20">
-                                    <div className="p-6 border-2 border-dashed border-white/10 rounded-full">
-                                        <LucideImage className="w-12 h-12" />
+                                    <div className="p-4 lg:p-6 border-2 border-dashed border-white/10 rounded-full">
+                                        <LucideImage className="w-8 h-8 lg:w-12 lg:h-12" />
                                     </div>
-                                    <span className="text-xs uppercase tracking-widest">Upload assets to preview</span>
+                                    <span className="text-[10px] uppercase tracking-widest">Upload assets to preview</span>
                                 </div>
                             )}
 
                             <div className="absolute top-4 left-4 text-[10px] font-mono text-gray-700">PREVIEW</div>
                         </div>
 
-                        <div className="absolute top-8 right-8">
-                            <div className="flex items-center gap-2 px-4 py-2 bg-indigo-600/10 border border-indigo-600/20 rounded-full backdrop-blur-xl">
-                                <Sparkles className="w-4 h-4 text-indigo-400" />
-                                <span className="text-xs text-indigo-300 font-medium">Live Preview</span>
+                        <div className="absolute top-4 right-4 lg:top-8 lg:right-8">
+                            <div className="flex items-center gap-2 px-3 py-1.5 lg:px-4 lg:py-2 bg-indigo-600/10 border border-indigo-600/20 rounded-full backdrop-blur-xl">
+                                <Sparkles className="w-3 h-3 lg:w-4 lg:h-4 text-indigo-400" />
+                                <span className="text-[10px] lg:text-xs text-indigo-300 font-medium">Live Preview</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Dynamic Asset Panel */}
-                    <aside className="w-80 border-l border-white/5 bg-black/20 p-6 flex flex-col gap-8 overflow-y-auto shrink-0">
+                    <aside className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-white/5 bg-black/20 p-6 flex flex-col gap-8 shrink-0 overflow-visible lg:overflow-y-auto">
                         <div>
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className="text-xs font-bold text-white uppercase tracking-widest">Dynamic Assets</h3>

@@ -57,33 +57,33 @@ export default function TemplatesPage() {
 
             <div className="pt-32 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 {/* Page Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
-                    <div>
-                        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Template Marketplace</h1>
-                        <p className="text-gray-400 text-lg">Browse professional templates for your next project.</p>
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
+                    <div className="text-center lg:text-left">
+                        <h1 className="text-3xl md:text-5xl font-bold text-white mb-4">Template Marketplace</h1>
+                        <p className="text-gray-400 text-sm md:text-lg">Browse professional templates for your next project.</p>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <div className="relative group flex-1 md:w-80">
+                    <div className="w-full lg:w-80">
+                        <div className="relative group">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-indigo-400 transition-colors" />
                             <input
                                 type="text"
                                 placeholder="Search templates..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-sm"
                             />
                         </div>
                     </div>
                 </div>
 
                 {/* Filter Bar */}
-                <div className="flex flex-wrap gap-2 mb-12">
+                <div className="flex items-center gap-2 mb-12 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
                     {CATEGORIES.map(cat => (
                         <button
                             key={cat}
                             onClick={() => setSelectedCategory(cat)}
-                            className={`px-6 py-2.5 rounded-full text-sm font-medium transition-all ${selectedCategory === cat
+                            className={`px-6 py-2.5 rounded-full text-xs md:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${selectedCategory === cat
                                 ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.2)]'
                                 : 'bg-white/5 text-gray-400 border border-white/5 hover:bg-white/10 hover:text-white'
                                 }`}
