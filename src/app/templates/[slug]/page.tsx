@@ -5,6 +5,8 @@ import Header from "@/components/Header";
 import { motion } from "framer-motion";
 import { Play, Sparkles, Clock, Layers, Share2, Edit3, ArrowLeft, Image as ImageIcon, Type, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 interface ImagePlaceholder {
     key: string;
@@ -39,6 +41,7 @@ export default function TemplateDetail({ params }: { params: Promise<{ slug: str
     const [template, setTemplate] = useState<Template | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const router = useRouter();
 
     useEffect(() => {
         fetchTemplate();
@@ -200,13 +203,21 @@ export default function TemplateDetail({ params }: { params: Promise<{ slug: str
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-white/5">
-                            <Link
-                                href={`/templates/${slug}/editor/${template.id}`}
+                            <button
+                                onClick={async () => {
+                                    const { data: { session } } = await supabase.auth.getSession();
+                                    if (!session) {
+                                        alert("Please log in to customize this template.");
+                                        router.push("/login");
+                                        return;
+                                    }
+                                    router.push(`/templates/${slug}/editor/${template.id}`);
+                                }}
                                 className="flex-1 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(79,70,229,0.3)] transition-all group"
                             >
                                 <Edit3 className="w-5 h-5" />
                                 Edit in Editor
-                            </Link>
+                            </button>
                             <button className="px-8 py-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all">
                                 <Share2 className="w-5 h-5" />
                                 Share

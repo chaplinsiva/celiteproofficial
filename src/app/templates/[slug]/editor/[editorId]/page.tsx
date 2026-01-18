@@ -405,38 +405,27 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         <div className="aspect-video w-full max-w-4xl bg-[#0F0F11] border border-white/10 rounded-2xl shadow-2xl relative overflow-hidden flex flex-col items-center justify-center group">
                             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5" />
 
-                            {firstImageKey && images[firstImageKey] ? (
-                                <div className="relative z-10 flex flex-col items-center gap-4 lg:gap-8 text-center px-6 lg:px-12">
-                                    <img src={images[firstImageKey]!} alt="User Upload" className="w-20 h-20 lg:w-32 lg:h-32 object-contain" />
-                                    <div>
-                                        <h2 className="text-2xl lg:text-5xl font-bold text-white tracking-tight">
-                                            {firstTextKey ? texts[firstTextKey] : "Your Title"}
-                                        </h2>
-                                        {secondTextKey && (
-                                            <p className="text-[10px] lg:text-sm text-gray-500 mt-1 lg:mt-2 font-medium tracking-widest uppercase">
-                                                {texts[secondTextKey]}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
+                            {template?.preview_url ? (
+                                <video
+                                    src={template.preview_url}
+                                    className="w-full h-full object-cover"
+                                    autoPlay
+                                    loop
+                                    muted
+                                    playsInline
+                                />
                             ) : (
                                 <div className="flex flex-col items-center gap-4 text-white/20">
                                     <div className="p-4 lg:p-6 border-2 border-dashed border-white/10 rounded-full">
                                         <LucideImage className="w-8 h-8 lg:w-12 lg:h-12" />
                                     </div>
-                                    <span className="text-[10px] uppercase tracking-widest">Upload assets to preview</span>
+                                    <span className="text-[10px] uppercase tracking-widest">No preview available</span>
                                 </div>
                             )}
 
-                            <div className="absolute top-4 left-4 text-[10px] font-mono text-gray-700">PREVIEW</div>
+                            <div className="absolute top-4 left-4 text-[10px] font-mono text-gray-700">TEMPLATE PREVIEW</div>
                         </div>
 
-                        <div className="absolute top-4 right-4 lg:top-8 lg:right-8">
-                            <div className="flex items-center gap-2 px-3 py-1.5 lg:px-4 lg:py-2 bg-indigo-600/10 border border-indigo-600/20 rounded-full backdrop-blur-xl">
-                                <Sparkles className="w-3 h-3 lg:w-4 lg:h-4 text-indigo-400" />
-                                <span className="text-[10px] lg:text-xs text-indigo-300 font-medium">Live Preview</span>
-                            </div>
-                        </div>
                     </div>
 
                     {/* Dynamic Asset Panel */}
