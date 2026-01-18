@@ -9,11 +9,10 @@ import {
 import Link from "next/link";
 
 interface RenderStatus {
-    status: "queued" | "pending" | "processing" | "completed" | "failed";
+    status: "pending" | "processing" | "completed" | "failed";
     outputUrl?: string;
     error?: string;
     plainlyState?: string;
-    queuePosition?: number;
     message?: string;
 }
 
@@ -26,7 +25,7 @@ export default function RenderPage({ params }: { params: Promise<{ id: string }>
     const [pollCount, setPollCount] = useState(0);
 
     useEffect(() => {
-        if (status.status === "processing" || status.status === "pending" || status.status === "queued") {
+        if (status.status === "processing" || status.status === "pending") {
             const interval = setInterval(() => {
                 checkStatus();
                 setPollCount((c) => c + 1);
@@ -74,49 +73,6 @@ export default function RenderPage({ params }: { params: Promise<{ id: string }>
                 animate={{ opacity: 1, y: 0 }}
                 className="max-w-xl w-full"
             >
-                {/* Queued State */}
-                {status.status === "queued" && (
-                    <div className="text-center">
-                        <div className="relative mb-8">
-                            <div className="w-24 h-24 mx-auto rounded-full bg-amber-500/10 flex items-center justify-center">
-                                <div className="text-3xl font-bold text-amber-400">
-                                    {status.queuePosition || "..."}
-                                </div>
-                            </div>
-                            <motion.div
-                                className="absolute inset-0 rounded-full border-2 border-amber-500/30"
-                                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
-                                transition={{ repeat: Infinity, duration: 2 }}
-                            />
-                        </div>
-
-                        <h1 className="text-3xl font-bold text-white mb-4">
-                            In Queue
-                        </h1>
-                        <p className="text-gray-400 mb-8">
-                            {status.message || `Position ${status.queuePosition} in queue`}
-                        </p>
-
-                        <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-6">
-                            <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-500">Queue Position</span>
-                                <span className="text-amber-400 flex items-center gap-2">
-                                    <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-                                    #{status.queuePosition}
-                                </span>
-                            </div>
-                            <div className="mt-4 pt-4 border-t border-white/5">
-                                <p className="text-xs text-gray-500">
-                                    Your render will start automatically when it reaches the front of the queue.
-                                </p>
-                            </div>
-                        </div>
-
-                        <p className="text-xs text-gray-600 mt-6">
-                            This page will update automatically. You can leave and check back later.
-                        </p>
-                    </div>
-                )}
 
                 {/* Processing State */}
                 {(status.status === "processing" || status.status === "pending") && (

@@ -27,11 +27,8 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { templateId, userId, parameters } = body;
 
-        console.log("Render request received:", {
-            templateId,
-            userId,
-            parameters
-        });
+        console.log("=== RENDER REQUEST START ===");
+        console.log("Request body:", { templateId, userId, parametersCount: Object.keys(parameters || {}).length });
 
         if (!templateId || !userId) {
             return NextResponse.json(
@@ -41,6 +38,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Step 1: Get template from database
+        console.log("Step 1: Fetching template...");
         const { data: template, error: templateError } = await supabaseAdmin
             .from("templates")
             .select("*")
@@ -48,11 +46,13 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (templateError || !template) {
+            console.error("Template fetch error:", templateError);
             return NextResponse.json(
                 { error: "Template not found" },
                 { status: 404 }
             );
         }
+        console.log("Template found:", template.title);
 
         if (!template.source_url) {
             return NextResponse.json(
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Step 2: Verify payment exists and is paid
+        console.log("Step 2: Verifying payment...");
         const { data: payment, error: paymentError } = await supabaseAdmin
             .from("payments")
             .select("*")
@@ -74,40 +74,23 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (paymentError || !payment) {
+            console.error("Payment verification failed:", paymentError);
             return NextResponse.json(
                 { error: "Payment required. Please complete payment before rendering." },
                 { status: 402 } // 402 Payment Required
             );
         }
+        console.log("Payment verified:", payment.id);
 
-        // Step 3: Check for active renders and calculate queue position
-        const { count: activeCount } = await supabaseAdmin
-            .from("render_jobs")
-            .select("*", { count: "exact", head: true })
-            .eq("status", "processing");
-
-        const isQueueEmpty = (activeCount || 0) === 0;
-        let queuePosition: number | null = null;
-
-        if (!isQueueEmpty) {
-            // Calculate queue position (count of queued + processing jobs)
-            const { count: queuedCount } = await supabaseAdmin
-                .from("render_jobs")
-                .select("*", { count: "exact", head: true })
-                .in("status", ["queued", "processing"]);
-
-            queuePosition = (queuedCount || 0) + 1;
-        }
-
-        // Create render job record with appropriate status
+        // Step 3: Create render job record (Processing immediately)
+        console.log("Step 3: Creating render job...");
         const { data: renderJob, error: jobError } = await supabaseAdmin
             .from("render_jobs")
             .insert({
                 user_id: userId,
                 template_id: templateId,
-                status: isQueueEmpty ? "processing" : "queued",
-                queue_position: queuePosition,
-                started_at: isQueueEmpty ? new Date().toISOString() : null,
+                status: "processing",
+                started_at: new Date().toISOString(),
                 parameters,
             })
             .select()
@@ -115,55 +98,31 @@ export async function POST(request: NextRequest) {
 
         if (jobError || !renderJob) {
             console.error("Render job creation failed:", jobError);
-            console.error("Job data attempted:", {
-                user_id: userId,
-                template_id: templateId,
-                status: isQueueEmpty ? "processing" : "queued",
-                queue_position: queuePosition,
-                started_at: isQueueEmpty ? new Date().toISOString() : null,
-                parameters,
-            });
             return NextResponse.json(
                 { error: "Failed to create render job", details: jobError?.message || "Unknown error" },
                 { status: 500 }
             );
         }
+        console.log("Render job created:", renderJob.id);
 
-        // Link payment to render job
+        // Step 4: Link payment to render job
+        console.log("Step 4: Linking payment...");
         await supabaseAdmin
             .from("payments")
             .update({ render_job_id: renderJob.id })
             .eq("id", payment.id);
 
-        // If queued, return immediately without starting render
-        if (!isQueueEmpty) {
-            return NextResponse.json({
-                success: true,
-                renderJobId: renderJob.id,
-                status: "queued",
-                queuePosition,
-                message: `In queue - Position ${queuePosition}`,
-            });
-        }
+        // Step 5: Start Plainly render process immediately (non-blocking)
+        console.log("Step 5: Starting Plainly render...");
+        processRenderJob(renderJob.id).catch((err) => {
+            console.error(`Error in background render processing for job ${renderJob.id}:`, err);
+        });
 
-
-        // Step 3: Start render processing if not queued
-        try {
-            const { success } = await processRenderJob(renderJob.id);
-
-            return NextResponse.json({
-                success: true,
-                renderJobId: renderJob.id,
-                status: "processing",
-                message: "Render started. Poll /api/render/status for updates.",
-            });
-        } catch (error) {
-            console.error("Render error:", error);
-            return NextResponse.json(
-                { error: "Render failed", details: String(error) },
-                { status: 500 }
-            );
-        }
+        return NextResponse.json({
+            success: true,
+            renderJobId: renderJob.id,
+            message: "Render started successfully"
+        });
 
     } catch (error) {
         console.error("Render request error:", error);
