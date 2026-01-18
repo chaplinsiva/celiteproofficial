@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { checkSupabaseConfig, supabaseAdmin } from "@/lib/supabase-admin";
+
+export const dynamic = "force-dynamic";
 
 // GET: Fetch single template
 export async function GET(
@@ -7,6 +9,7 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        checkSupabaseConfig();
         const { id } = await params;
 
         const { data, error } = await supabaseAdmin
@@ -21,7 +24,7 @@ export async function GET(
     } catch (error) {
         console.error("Error fetching template:", error);
         return NextResponse.json(
-            { error: "Failed to fetch template" },
+            { error: "Failed to fetch template", details: String(error) },
             { status: 500 }
         );
     }
@@ -33,6 +36,7 @@ export async function PUT(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        checkSupabaseConfig();
         const { id } = await params;
         const body = await request.json();
 
@@ -52,7 +56,7 @@ export async function PUT(
     } catch (error) {
         console.error("Error updating template:", error);
         return NextResponse.json(
-            { error: "Failed to update template" },
+            { error: "Failed to update template", details: String(error) },
             { status: 500 }
         );
     }
@@ -64,6 +68,7 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        checkSupabaseConfig();
         const { id } = await params;
 
         const { error } = await supabaseAdmin
@@ -77,7 +82,7 @@ export async function DELETE(
     } catch (error) {
         console.error("Error deleting template:", error);
         return NextResponse.json(
-            { error: "Failed to delete template" },
+            { error: "Failed to delete template", details: String(error) },
             { status: 500 }
         );
     }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { checkSupabaseConfig, supabaseAdmin } from "@/lib/supabase-admin";
+
+export const dynamic = "force-dynamic";
 
 // GET: Fetch template by slug
 export async function GET(
@@ -7,6 +9,7 @@ export async function GET(
     { params }: { params: Promise<{ slug: string }> }
 ) {
     try {
+        checkSupabaseConfig();
         const { slug } = await params;
 
         const { data, error } = await supabaseAdmin
@@ -26,7 +29,7 @@ export async function GET(
     } catch (error) {
         console.error("Error fetching template:", error);
         return NextResponse.json(
-            { error: "Failed to fetch template" },
+            { error: "Failed to fetch template", details: String(error) },
             { status: 500 }
         );
     }
