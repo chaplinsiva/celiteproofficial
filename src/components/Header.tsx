@@ -12,20 +12,23 @@ const Header = () => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
 
   useEffect(() => {
+    if (!supabase) return;
+
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
       setUser(session?.user ?? null);
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       setUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => subscription?.unsubscribe();
   }, []);
 
   const handleLogout = async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
   };
 
