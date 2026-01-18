@@ -274,45 +274,107 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
         setIsRendering(true);
 
         try {
-            // Build parameters object with placeholder keys
-            const parameters: Record<string, string> = {};
-
-            // Add image URLs (must be R2 URLs, not base64)
-            for (const [key, url] of Object.entries(images)) {
-                if (url && url.startsWith("http")) {
-                    parameters[key] = url;
-                }
-            }
-
-            // Add text values
-            for (const [key, value] of Object.entries(texts)) {
-                if (value) {
-                    parameters[key] = value;
-                }
-            }
-
-            // Call render API
-            const res = await fetch("/api/render", {
+            // Step 1: Create payment order
+            const orderRes = await fetch("/api/payment/create-order", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     templateId: template.id,
                     userId,
-                    parameters,
                 }),
             });
 
-            const data = await res.json();
+            const orderData = await orderRes.json();
 
-            if (!res.ok) {
-                throw new Error(data.error || "Render failed");
+            if (!orderRes.ok) {
+                throw new Error(orderData.error || "Failed to create payment order");
             }
 
-            // Navigate to render status page
-            router.push(`/render/${data.renderJobId}`);
+            // Step 2: Open Razorpay checkout
+            const options = {
+                key: orderData.keyId,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: "CelitePro",
+                description: `Render: ${template.title}`,
+                order_id: orderData.orderId,
+                handler: async function (response: any) {
+                    try {
+                        // Step 3: Verify payment
+                        const verifyRes = await fetch("/api/payment/verify-payment", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                orderId: response.razorpay_order_id,
+                                paymentId: response.razorpay_payment_id,
+                                signature: response.razorpay_signature,
+                            }),
+                        });
+
+                        const verifyData = await verifyRes.json();
+
+                        if (!verifyRes.ok) {
+                            throw new Error(verifyData.error || "Payment verification failed");
+                        }
+
+                        // Step 4: Start render after successful payment
+                        const parameters: Record<string, string> = {};
+
+                        // Add image URLs
+                        for (const [key, url] of Object.entries(images)) {
+                            if (url && url.startsWith("http")) {
+                                parameters[key] = url;
+                            }
+                        }
+
+                        // Add text values
+                        for (const [key, value] of Object.entries(texts)) {
+                            if (value) {
+                                parameters[key] = value;
+                            }
+                        }
+
+                        const renderRes = await fetch("/api/render", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                templateId: template.id,
+                                userId,
+                                parameters,
+                            }),
+                        });
+
+                        const renderData = await renderRes.json();
+
+                        if (!renderRes.ok) {
+                            throw new Error(renderData.error || "Render failed");
+                        }
+
+                        // Navigate to render status page
+                        router.push(`/render/${renderData.renderJobId}`);
+                    } catch (error) {
+                        console.error("Post-payment error:", error);
+                        alert(`Error: ${error}`);
+                        setIsRendering(false);
+                    }
+                },
+                modal: {
+                    ondismiss: function () {
+                        setIsRendering(false);
+                    },
+                },
+                theme: {
+                    color: "#4F46E5",
+                },
+            };
+
+            // @ts-ignore - Razorpay is loaded via script
+            const razorpay = new window.Razorpay(options);
+            razorpay.open();
+
         } catch (error) {
-            console.error("Render error:", error);
-            alert(`Render failed: ${error}`);
+            console.error("Payment error:", error);
+            alert(`Payment failed: ${error}`);
             setIsRendering(false);
         }
     };
@@ -424,13 +486,13 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         className="flex items-center gap-2 px-4 md:px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs md:text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     >
                         {isRendering ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> Rendering...</>
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
                         ) : (
                             <>
                                 {uploadingKeys.size > 0 ? (
                                     <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
                                 ) : (
-                                    <><Download className="w-4 h-4" /> Render</>
+                                    <><Download className="w-4 h-4" /> Pay ₹199 & Render</>
                                 )}
                             </>
                         )}

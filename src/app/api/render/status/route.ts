@@ -2,8 +2,55 @@ import { NextRequest, NextResponse } from "next/server";
 import { plainlyClient } from "@/lib/plainly";
 import { checkSupabaseConfig, supabaseAdmin } from "@/lib/supabase-admin";
 import { uploadToR2 } from "@/lib/r2";
+import { processRenderJob } from "@/lib/render-processor";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Process the next job in the queue
+ * Called when a render completes or fails to start the next queued job
+ */
+async function processNextInQueue() {
+    try {
+        // Find the oldest queued job
+        const { data: nextJob, error } = await supabaseAdmin
+            .from("render_jobs")
+            .select("*")
+            .eq("status", "queued")
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .single();
+
+        if (error || !nextJob) {
+            console.log("No queued jobs to process");
+            return;
+        }
+
+        console.log(`Processing next queued job: ${nextJob.id}`);
+
+        // Update status to processing and set started_at
+        await supabaseAdmin
+            .from("render_jobs")
+            .update({
+                status: "processing",
+                started_at: new Date().toISOString(),
+                queue_position: null,
+            })
+            .eq("id", nextJob.id);
+
+        // Trigger the actual render process
+        try {
+            await processRenderJob(nextJob.id);
+            console.log(`Successfully started render for queued job ${nextJob.id}`);
+        } catch (error) {
+            console.error(`Failed to process queued job ${nextJob.id}:`, error);
+            // Error handling is done in processRenderJob, which updates the job status
+        }
+    } catch (error) {
+        console.error("Error processing next job in queue:", error);
+    }
+}
+
 
 /**
  * Check render status and handle completion
@@ -43,6 +90,16 @@ export async function GET(request: NextRequest) {
                 error: job.error_message,
             });
         }
+
+        // If queued, return queue position
+        if (job.status === "queued") {
+            return NextResponse.json({
+                status: "queued",
+                queuePosition: job.queue_position,
+                message: `In queue - Position ${job.queue_position}`,
+            });
+        }
+
 
         // Check Plainly render status
         if (!job.plainly_render_id) {
@@ -89,6 +146,9 @@ export async function GET(request: NextRequest) {
                     }
                 }
 
+                // Process next job in queue
+                await processNextInQueue();
+
                 return NextResponse.json({
                     status: "completed",
                     outputUrl: r2Url,
@@ -130,6 +190,9 @@ export async function GET(request: NextRequest) {
                     if (job.plainly_render_id) await plainlyClient.deleteRender(job.plainly_render_id);
                 } catch { }
             }
+
+            // Process next job in queue
+            await processNextInQueue();
 
             return NextResponse.json({
                 status: "failed",
