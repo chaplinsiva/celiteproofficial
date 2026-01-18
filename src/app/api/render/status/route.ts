@@ -73,13 +73,19 @@ export async function GET(request: NextRequest) {
                     })
                     .eq("id", renderJobId);
 
-                // Cleanup: Delete temporary Plainly project
-                if (job.plainly_project_id) {
+                // Cleanup: Delete temporary Plainly project and render
+                if (job.plainly_project_id || job.plainly_render_id) {
                     try {
-                        await plainlyClient.deleteProject(job.plainly_project_id);
-                        console.log(`Cleaned up Plainly project: ${job.plainly_project_id}`);
+                        if (job.plainly_project_id) {
+                            await plainlyClient.deleteProject(job.plainly_project_id);
+                            console.log(`Cleaned up Plainly project: ${job.plainly_project_id}`);
+                        }
+                        if (job.plainly_render_id) {
+                            await plainlyClient.deleteRender(job.plainly_render_id);
+                            console.log(`Cleaned up Plainly render: ${job.plainly_render_id}`);
+                        }
                     } catch (cleanupError) {
-                        console.error("Failed to cleanup Plainly project:", cleanupError);
+                        console.error("Failed to cleanup Plainly resources:", cleanupError);
                     }
                 }
 
@@ -118,9 +124,10 @@ export async function GET(request: NextRequest) {
                 .eq("id", renderJobId);
 
             // Cleanup on failure too
-            if (job.plainly_project_id) {
+            if (job.plainly_project_id || job.plainly_render_id) {
                 try {
-                    await plainlyClient.deleteProject(job.plainly_project_id);
+                    if (job.plainly_project_id) await plainlyClient.deleteProject(job.plainly_project_id);
+                    if (job.plainly_render_id) await plainlyClient.deleteRender(job.plainly_render_id);
                 } catch { }
             }
 

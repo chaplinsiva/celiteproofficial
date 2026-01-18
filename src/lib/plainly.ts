@@ -434,6 +434,23 @@ class PlainlyClient {
             headers: this.headers,
         });
     }
+
+    /**
+     * Delete a render (cleanup)
+     */
+    async deleteRender(renderId: string): Promise<void> {
+        try {
+            const res = await fetch(`${PLAINLY_BASE_URL}/renders/${renderId}`, {
+                method: "DELETE",
+                headers: this.headers,
+            });
+            if (!res.ok) {
+                console.warn(`Failed to delete Plainly render ${renderId}: ${res.statusText}`);
+            }
+        } catch (error) {
+            console.error(`Error deleting Plainly render ${renderId}:`, error);
+        }
+    }
 }
 
 export const plainlyClient = new PlainlyClient();
