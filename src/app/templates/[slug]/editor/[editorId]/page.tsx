@@ -94,6 +94,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
 
     // Rendering State
     const [isRendering, setIsRendering] = useState(false);
+    const [uploadingKeys, setUploadingKeys] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         fetchTemplate();
@@ -183,32 +184,57 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
 
         // Upload to R2 if user is logged in
         if (userId && uploadingFile && template) {
+            const currentKey = activeImageKey;
+            setUploadingKeys(prev => new Set(prev).add(currentKey));
+
             try {
                 canvas.toBlob(async (blob) => {
-                    if (!blob) return;
+                    if (!blob) {
+                        setUploadingKeys(prev => {
+                            const next = new Set(prev);
+                            next.delete(currentKey);
+                            return next;
+                        });
+                        return;
+                    }
 
                     const formData = new FormData();
                     formData.append("userId", userId);
                     formData.append("templateId", template.id);
-                    formData.append("placeholderKey", activeImageKey);
+                    formData.append("placeholderKey", currentKey);
                     formData.append("file", blob, uploadingFile.name);
 
-                    const res = await fetch("/api/user/upload", {
-                        method: "POST",
-                        body: formData,
-                    });
+                    try {
+                        const res = await fetch("/api/user/upload", {
+                            method: "POST",
+                            body: formData,
+                        });
 
-                    const data = await res.json();
-                    if (data.url) {
-                        // Update with R2 URL
-                        setImages(prev => ({
-                            ...prev,
-                            [activeImageKey!]: data.url
-                        }));
+                        const data = await res.json();
+                        if (data.url) {
+                            // Update with R2 URL
+                            setImages(prev => ({
+                                ...prev,
+                                [currentKey]: data.url
+                            }));
+                        }
+                    } catch (err) {
+                        console.error("Upload fetch error:", err);
+                    } finally {
+                        setUploadingKeys(prev => {
+                            const next = new Set(prev);
+                            next.delete(currentKey);
+                            return next;
+                        });
                     }
                 }, "image/png");
             } catch (error) {
                 console.error("Upload error:", error);
+                setUploadingKeys(prev => {
+                    const next = new Set(prev);
+                    next.delete(currentKey);
+                    return next;
+                });
             }
         }
 
@@ -456,7 +482,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                             />
                                             <label
                                                 htmlFor={`upload-${placeholder.key}`}
-                                                className="aspect-square w-full bg-white/[0.02] border border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-white/[0.04] hover:border-indigo-500/50 transition-all p-4 text-center group"
+                                                className="aspect-square w-full bg-white/[0.02] border border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-white/[0.04] hover:border-indigo-500/50 transition-all p-4 text-center group relative overflow-hidden"
                                             >
                                                 {images[placeholder.key] ? (
                                                     <div className="relative w-full h-full flex items-center justify-center">
@@ -476,6 +502,21 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                                         </div>
                                                     </>
                                                 )}
+
+                                                {/* Uploading Overlay */}
+                                                <AnimatePresence>
+                                                    {uploadingKeys.has(placeholder.key) && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0 }}
+                                                            animate={{ opacity: 1 }}
+                                                            exit={{ opacity: 0 }}
+                                                            className="absolute inset-0 bg-black/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-2"
+                                                        >
+                                                            <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+                                                            <span className="text-[10px] font-bold text-indigo-100 uppercase tracking-widest animate-pulse">Uploading...</span>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
                                             </label>
                                             {images[placeholder.key] && (
                                                 <button
