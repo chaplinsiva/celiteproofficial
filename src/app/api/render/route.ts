@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { plainlyClient } from "@/lib/plainly";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { checkSupabaseConfig, supabaseAdmin } from "@/lib/supabase-admin";
+
+export const dynamic = "force-dynamic";
 
 /**
  * Render API - Core Orchestration Pipeline
@@ -16,6 +18,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
  */
 
 export async function POST(request: NextRequest) {
+    checkSupabaseConfig();
     let plainlyProjectId: string | null = null;
 
     try {

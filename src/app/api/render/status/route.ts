@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { plainlyClient } from "@/lib/plainly";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { checkSupabaseConfig, supabaseAdmin } from "@/lib/supabase-admin";
 import { uploadToR2 } from "@/lib/r2";
+
+export const dynamic = "force-dynamic";
 
 /**
  * Check render status and handle completion
  */
 export async function GET(request: NextRequest) {
+    checkSupabaseConfig();
     try {
         const { searchParams } = new URL(request.url);
         const renderJobId = searchParams.get("jobId");

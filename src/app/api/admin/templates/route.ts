@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { checkSupabaseConfig, supabaseAdmin } from "@/lib/supabase-admin";
+
+export const dynamic = "force-dynamic";
 
 // GET: List all templates
 export async function GET() {
     try {
+        checkSupabaseConfig();
         const { data, error } = await supabaseAdmin
             .from("templates")
             .select("*")
