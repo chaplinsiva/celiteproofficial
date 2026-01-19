@@ -34,10 +34,11 @@ export default function SignUp() {
 
         if (error) {
             setError(error.message);
+        } else if (data.session) {
+            // Auto-confimed, redirect to dashboard
+            router.push("/dashboard");
         } else {
             setMessage("Check your email for the confirmation link!");
-            // Optionally redirect after a delay
-            // setTimeout(() => router.push("/login"), 3000);
         }
         setLoading(false);
     };

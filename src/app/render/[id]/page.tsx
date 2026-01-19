@@ -44,6 +44,15 @@ export default function RenderPage({ params }: { params: Promise<{ id: string }>
             const res = await fetch(`/api/render/status?jobId=${renderJobId}`);
             const data = await res.json();
             setStatus(data);
+
+            // Mark as viewed if it exists
+            if (res.ok) {
+                fetch("/api/notifications/mark-viewed", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ jobId: renderJobId })
+                }).catch(err => console.error("Auto-mark viewed error:", err));
+            }
         } catch (error) {
             console.error("Status check error:", error);
         }

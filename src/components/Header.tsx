@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Video, Menu, X, LogOut, User } from "lucide-react";
+import { Video, Menu, X, LogOut, User, Bell } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { User as SupabaseUser } from "@supabase/supabase-js";
+import Notifications from "./Notifications";
 
 const Header = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -57,6 +58,9 @@ const Header = () => {
           </div>
 
           <div className="hidden md:flex items-center gap-4">
+            {user && (
+              <Notifications userId={user.id} />
+            )}
             {user ? (
               <div className="relative">
                 <button

@@ -2,8 +2,8 @@
 
 import React from "react";
 import Header from "@/components/Header";
-import { motion } from "framer-motion";
-import { Play, Sparkles, Clock, Layers, Share2, Edit3, ArrowLeft, Image as ImageIcon, Type } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Play, Sparkles, Clock, Layers, Share2, Edit3, ArrowLeft, Image as ImageIcon, Type, User } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
@@ -36,10 +36,44 @@ interface Template {
 
 export default function TemplateClient({ template }: { template: Template }) {
     const router = useRouter();
+    const [showAlert, setShowAlert] = React.useState(false);
 
     return (
-        <main className="min-h-screen bg-[#0A0A0B]">
+        <main className="min-h-screen bg-[#0A0A0B] relative">
             <Header />
+
+            <AnimatePresence>
+                {showAlert && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="bg-[#111113] border border-white/10 p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl"
+                        >
+                            <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <User className="w-8 h-8 text-indigo-400" />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Login Required</h3>
+                            <p className="text-gray-400 mb-8">Please log in to customize and render this template.</p>
+                            <div className="flex flex-col gap-3">
+                                <Link
+                                    href="/login"
+                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all"
+                                >
+                                    Log In
+                                </Link>
+                                <button
+                                    onClick={() => setShowAlert(false)}
+                                    className="w-full py-3 bg-white/5 hover:bg-white/10 text-gray-400 font-bold rounded-xl transition-all"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-24">
                 <Link href="/templates" className="inline-flex items-center gap-2 text-gray-500 hover:text-white mb-8 transition-colors group">
@@ -156,8 +190,7 @@ export default function TemplateClient({ template }: { template: Template }) {
                                 onClick={async () => {
                                     const { data: { session } } = await supabase.auth.getSession();
                                     if (!session) {
-                                        alert("Please log in to customize this template.");
-                                        router.push("/login");
+                                        setShowAlert(true);
                                         return;
                                     }
                                     router.push(`/templates/${template.slug}/editor/${template.id}`);
