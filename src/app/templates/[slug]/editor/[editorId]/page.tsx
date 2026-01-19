@@ -515,10 +515,10 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-8 backdrop-blur-sm"
+                        className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4 sm:p-8 backdrop-blur-sm"
                     >
-                        <div className="bg-[#121214] border border-white/10 rounded-3xl overflow-hidden max-w-4xl w-full flex flex-col shadow-2xl">
-                            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+                        <div className="bg-[#121214] border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden max-w-4xl w-full flex flex-col shadow-2xl max-h-[95vh] sm:max-h-[90vh]">
+                            <div className="p-4 sm:p-6 border-b border-white/10 flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <div className="bg-indigo-600/20 p-2 rounded-lg">
                                         <CropIcon className="w-5 h-5 text-indigo-400" />
@@ -538,7 +538,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 </button>
                             </div>
 
-                            <div className="px-8 pb-4 flex items-center justify-center gap-2">
+                            <div className="px-4 sm:px-8 pb-4 flex items-center flex-wrap justify-center gap-2">
                                 <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex items-center gap-1">
                                     <button
                                         onClick={() => cropperRef.current?.cropper.zoom(0.1)}
@@ -599,15 +599,15 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 </div>
                             </div>
 
-                            <div className="p-8 pt-0 max-h-[60vh] flex items-center justify-center relative bg-black/40">
-                                <div className="relative w-full" style={{ height: 400 }}>
+                            <div className="p-4 sm:p-8 pt-0 flex-1 flex items-center justify-center relative bg-black/40 overflow-hidden">
+                                <div className="relative w-full h-[300px] sm:h-[450px]">
                                     <Cropper
                                         src={imageToCrop || ""}
-                                        style={{ height: 400, width: "100%" }}
+                                        style={{ height: "100%", width: "100%" }}
                                         aspectRatio={activeAspectRatio}
                                         guides={true}
                                         ref={cropperRef}
-                                        viewMode={1}
+                                        viewMode={0}
                                         dragMode="move"
                                         background={false}
                                         responsive={true}
@@ -652,7 +652,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 </div>
                             </div>
 
-                            <div className="p-6 bg-black/40 border-t border-white/10 flex justify-end gap-3">
+                            <div className="p-4 sm:p-6 bg-black/40 border-t border-white/10 flex justify-end gap-3">
                                 <button
                                     onClick={() => setShowCropper(false)}
                                     className="px-6 py-2.5 rounded-xl border border-white/10 text-sm font-medium hover:bg-white/5 transition-all"

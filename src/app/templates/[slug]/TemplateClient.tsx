@@ -3,7 +3,7 @@
 import React from "react";
 import Header from "@/components/Header";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Sparkles, Clock, Layers, Share2, Edit3, ArrowLeft, Image as ImageIcon, Type, User } from "lucide-react";
+import { Play, Sparkles, Clock, Layers, Share2, Edit3, ArrowLeft, Image as ImageIcon, Type, User, Check } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
@@ -37,6 +37,31 @@ interface Template {
 export default function TemplateClient({ template }: { template: Template }) {
     const router = useRouter();
     const [showAlert, setShowAlert] = React.useState(false);
+    const [copied, setCopied] = React.useState(false);
+
+    const handleShare = async () => {
+        const shareData = {
+            title: `${template.title} | CelitePro`,
+            text: template.description || `Check out this professional video template: ${template.title}`,
+            url: window.location.href,
+        };
+
+        if (navigator.share) {
+            try {
+                await navigator.share(shareData);
+            } catch (err) {
+                console.error("Error sharing:", err);
+            }
+        } else {
+            try {
+                await navigator.clipboard.writeText(window.location.href);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            } catch (err) {
+                console.error("Error copying to clipboard:", err);
+            }
+        }
+    };
 
     return (
         <main className="min-h-screen bg-[#0A0A0B] relative">
@@ -54,20 +79,29 @@ export default function TemplateClient({ template }: { template: Template }) {
                             <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
                                 <User className="w-8 h-8 text-indigo-400" />
                             </div>
-                            <h3 className="text-xl font-bold text-white mb-2">Login Required</h3>
-                            <p className="text-gray-400 mb-8">Please log in to customize and render this template.</p>
+                            <h3 className="text-xl font-bold text-white mb-2">Almost There!</h3>
+                            <p className="text-gray-400 mb-8">Create an account or login to customize and render this template.</p>
                             <div className="flex flex-col gap-3">
                                 <Link
-                                    href="/login"
-                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all"
+                                    href="/signup"
+                                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl transition-all shadow-xl"
                                 >
-                                    Log In
+                                    Join Now & Edit
                                 </Link>
+                                <div className="mt-2">
+                                    <p className="text-sm text-gray-500 mb-2">Already have an account?</p>
+                                    <Link
+                                        href="/login"
+                                        className="text-indigo-400 hover:text-indigo-300 font-bold text-sm"
+                                    >
+                                        Log In Here
+                                    </Link>
+                                </div>
                                 <button
                                     onClick={() => setShowAlert(false)}
-                                    className="w-full py-3 bg-white/5 hover:bg-white/10 text-gray-400 font-bold rounded-xl transition-all"
+                                    className="mt-4 text-xs text-gray-600 hover:text-gray-400 transition-colors"
                                 >
-                                    Cancel
+                                    Dismiss
                                 </button>
                             </div>
                         </motion.div>
@@ -200,9 +234,12 @@ export default function TemplateClient({ template }: { template: Template }) {
                                 <Edit3 className="w-5 h-5" />
                                 Edit in Editor
                             </button>
-                            <button className="px-8 py-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all">
-                                <Share2 className="w-5 h-5" />
-                                Share
+                            <button
+                                onClick={handleShare}
+                                className="px-8 py-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all"
+                            >
+                                {copied ? <Check className="w-5 h-5 text-emerald-400" /> : <Share2 className="w-5 h-5" />}
+                                {copied ? "Copied!" : "Share"}
                             </button>
                         </div>
                     </motion.div>
