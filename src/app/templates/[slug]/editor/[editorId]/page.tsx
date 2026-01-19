@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
     ArrowLeft, Save, Download, Settings,
     Layers, Type, Image as LucideImage,
-    Loader2, Sparkles, Upload, X, Crop as CropIcon, Check
+    Loader2, Sparkles, Upload, X, Crop as CropIcon, Check,
+    ZoomIn, ZoomOut, RotateCcw, Move, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -532,18 +533,85 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 </button>
                             </div>
 
-                            <div className="p-8 max-h-[60vh] flex items-center justify-center">
+                            <div className="px-8 pb-4 flex items-center justify-center gap-2">
+                                <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex items-center gap-1">
+                                    <button
+                                        onClick={() => cropperRef.current?.cropper.zoom(0.1)}
+                                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                                        title="Zoom In"
+                                    >
+                                        <ZoomIn className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => cropperRef.current?.cropper.zoom(-0.1)}
+                                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                                        title="Zoom Out"
+                                    >
+                                        <ZoomOut className="w-4 h-4" />
+                                    </button>
+                                    <div className="w-[1px] h-4 bg-white/10 mx-1" />
+                                    <button
+                                        onClick={() => cropperRef.current?.cropper.rotate(-90)}
+                                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                                        title="Rotate Left"
+                                    >
+                                        <RotateCcw className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => cropperRef.current?.cropper.rotate(90)}
+                                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                                        title="Rotate Right"
+                                    >
+                                        <RotateCcw className="w-4 h-4 scale-x-[-1]" />
+                                    </button>
+                                    <div className="w-[1px] h-4 bg-white/10 mx-1" />
+                                    <button
+                                        onClick={() => {
+                                            cropperRef.current?.cropper.reset();
+                                            cropperRef.current?.cropper.setDragMode('move');
+                                        }}
+                                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                                        title="Reset"
+                                    >
+                                        <RefreshCw className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex items-center gap-1">
+                                    <button
+                                        onClick={() => cropperRef.current?.cropper.setDragMode('move')}
+                                        className="p-2 hover:bg-indigo-500/20 hover:text-indigo-400 rounded-lg text-gray-400 transition-all focus:text-indigo-400 focus:bg-indigo-500/20"
+                                        title="Move Mode"
+                                    >
+                                        <Move className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => cropperRef.current?.cropper.setDragMode('crop')}
+                                        className="p-2 hover:bg-indigo-500/20 hover:text-indigo-400 rounded-lg text-gray-400 transition-all focus:text-indigo-400 focus:bg-indigo-500/20"
+                                        title="Crop Mode"
+                                    >
+                                        <CropIcon className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="p-8 pt-0 max-h-[60vh] flex items-center justify-center">
                                 <Cropper
                                     src={imageToCrop || ""}
                                     style={{ height: 400, width: "100%" }}
                                     aspectRatio={activeAspectRatio}
                                     guides={true}
                                     ref={cropperRef}
-                                    viewMode={1}
+                                    viewMode={0}
+                                    dragMode="move"
                                     background={false}
                                     responsive={true}
-                                    autoCropArea={1}
+                                    autoCropArea={0.8}
                                     checkOrientation={false}
+                                    toggleDragModeOnDblclick={true}
+                                    center={true}
+                                    movable={true}
+                                    zoomable={true}
+                                    wheelZoomRatio={0.1}
                                 />
                             </div>
 
