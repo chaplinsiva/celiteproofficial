@@ -250,11 +250,11 @@ export default function AdminDashboard() {
 
                         <div className="space-y-3">
                             {[
-                                { label: "Manage Templates", icon: Layout, desc: "Edit or add new video templates" },
-                                { label: "User Management", icon: Users, desc: "View and manage platform users" },
-                                { label: "Global Settings", icon: Settings, desc: "API keys and platform config" },
+                                { label: "Manage Templates", icon: Layout, desc: "Edit or add new video templates", href: "/admin/templates" },
+                                { label: "User Management", icon: Users, desc: "View and manage platform users", href: "/admin/users" },
+                                { label: "Global Settings", icon: Settings, desc: "API keys and platform config", href: "/admin/settings" },
                             ].map((tool, i) => (
-                                <button key={i} className="w-full p-4 bg-white/[0.02] border border-white/5 rounded-2xl flex items-center gap-4 hover:bg-white/[0.04] hover:border-white/10 transition-all text-left">
+                                <Link key={i} href={tool.href} className="w-full p-4 bg-white/[0.02] border border-white/5 rounded-2xl flex items-center gap-4 hover:bg-white/[0.04] hover:border-white/10 transition-all text-left">
                                     <div className="p-2.5 rounded-xl bg-white/5 text-gray-400">
                                         <tool.icon className="w-5 h-5" />
                                     </div>
@@ -262,7 +262,7 @@ export default function AdminDashboard() {
                                         <div className="text-sm font-bold text-white">{tool.label}</div>
                                         <div className="text-[10px] text-gray-500">{tool.desc}</div>
                                     </div>
-                                </button>
+                                </Link>
                             ))}
                         </div>
 

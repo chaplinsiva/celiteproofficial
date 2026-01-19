@@ -38,6 +38,16 @@ export async function POST(request: NextRequest) {
             results.source_url = await uploadToR2(buffer, path, "application/zip");
         }
 
+        // Upload reference image for placeholder
+        const reference = formData.get("reference") as File | null;
+        const key = formData.get("key") as string | null;
+        if (reference && key) {
+            const buffer = Buffer.from(await reference.arrayBuffer());
+            const ext = reference.name.split(".").pop() || "jpg";
+            const path = `templates/${slug}/references/${key}.${ext}`;
+            results.reference_url = await uploadToR2(buffer, path, reference.type);
+        }
+
         return NextResponse.json({ success: true, urls: results });
     } catch (error) {
         console.error("Upload error:", error);

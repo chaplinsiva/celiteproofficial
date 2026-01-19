@@ -6,7 +6,7 @@ import {
     ArrowLeft, Save, Download, Settings,
     Layers, Type, Image as LucideImage,
     Loader2, Sparkles, Upload, X, Crop as CropIcon, Check,
-    ZoomIn, ZoomOut, RotateCcw, Move, RefreshCw
+    ZoomIn, ZoomOut, RotateCcw, Move, RefreshCw, Eye
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,6 +20,7 @@ interface ImagePlaceholder {
     label: string;
     aspectRatio: string;
     previewTimestamp?: number;
+    referenceImageUrl?: string;
 }
 
 interface TextPlaceholder {
@@ -99,19 +100,19 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
     const [activeAspectRatio, setActiveAspectRatio] = useState<number>(1);
     const [targetDimensions, setTargetDimensions] = useState<{ width: number; height: number }>({ width: 1920, height: 1920 });
     const [uploadingFile, setUploadingFile] = useState<File | null>(null);
+    const [cropBoxData, setCropBoxData] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
     const cropperRef = useRef<ReactCropperElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
 
     // Rendering State
     const [isRendering, setIsRendering] = useState(false);
     const [uploadingKeys, setUploadingKeys] = useState<Set<string>>(new Set());
+    const [activePlaceholder, setActivePlaceholder] = useState<string | null>(null);
 
     const seekTo = (timestamp?: number) => {
         if (timestamp !== undefined && videoRef.current) {
             videoRef.current.currentTime = timestamp;
-            if (videoRef.current.paused) {
-                videoRef.current.play().catch(() => { }); // Autoplay if possible
-            }
+            videoRef.current.pause();
         }
     };
 
@@ -358,6 +359,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
         setUploadingFile(null);
     };
 
+
     const handleRender = async () => {
         if (!template || !userId) {
             toast.error("Please log in to render videos");
@@ -399,6 +401,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 body: JSON.stringify({
                     templateId: template.id,
                     userId,
+                    projectId: savedProjectId,
                 }),
             });
 
@@ -452,24 +455,14 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                             }
                         }
 
-                        const renderRes = await fetch("/api/render", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                templateId: template.id,
-                                userId,
-                                parameters,
-                            }),
-                        });
-
-                        const renderData = await renderRes.json();
-
-                        if (!renderRes.ok) {
-                            throw new Error(renderData.error || "Render failed");
+                        // Step 4: Navigate to render status page (render already started server-side)
+                        if (verifyData.renderJobId) {
+                            router.push(`/render/${verifyData.renderJobId}`);
+                        } else {
+                            // Fallback to dashboard if something went wrong but payment was success
+                            router.push('/dashboard');
+                            toast.success("Payment successful! Your render will start shortly.");
                         }
-
-                        // Navigate to render status page
-                        router.push(`/render/${renderData.renderJobId}`);
                     } catch (error) {
                         console.error("Post-payment error:", error);
                         toast.error(`Error: ${error}`);
@@ -606,25 +599,57 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 </div>
                             </div>
 
-                            <div className="p-8 pt-0 max-h-[60vh] flex items-center justify-center">
-                                <Cropper
-                                    src={imageToCrop || ""}
-                                    style={{ height: 400, width: "100%" }}
-                                    aspectRatio={activeAspectRatio}
-                                    guides={true}
-                                    ref={cropperRef}
-                                    viewMode={0}
-                                    dragMode="move"
-                                    background={false}
-                                    responsive={true}
-                                    autoCropArea={0.8}
-                                    checkOrientation={false}
-                                    toggleDragModeOnDblclick={true}
-                                    center={true}
-                                    movable={true}
-                                    zoomable={true}
-                                    wheelZoomRatio={0.1}
-                                />
+                            <div className="p-8 pt-0 max-h-[60vh] flex items-center justify-center relative bg-black/40">
+                                <div className="relative w-full" style={{ height: 400 }}>
+                                    <Cropper
+                                        src={imageToCrop || ""}
+                                        style={{ height: 400, width: "100%" }}
+                                        aspectRatio={activeAspectRatio}
+                                        guides={true}
+                                        ref={cropperRef}
+                                        viewMode={1}
+                                        dragMode="move"
+                                        background={false}
+                                        responsive={true}
+                                        autoCropArea={1}
+                                        checkOrientation={false}
+                                        toggleDragModeOnDblclick={true}
+                                        center={true}
+                                        movable={true}
+                                        zoomable={true}
+                                        wheelZoomRatio={0.1}
+                                        ready={() => {
+                                            const cropper = cropperRef.current?.cropper;
+                                            if (cropper) {
+                                                setCropBoxData(cropper.getCropBoxData());
+                                            }
+                                        }}
+                                        crop={() => {
+                                            const cropper = cropperRef.current?.cropper;
+                                            if (cropper) {
+                                                setCropBoxData(cropper.getCropBoxData());
+                                            }
+                                        }}
+                                    />
+                                    {/* Reference image overlay on the crop box - synchronized with cropper data */}
+                                    {cropBoxData && activeImageKey && template?.image_placeholders?.find(p => p.key === activeImageKey)?.referenceImageUrl && (
+                                        <div
+                                            className="absolute pointer-events-none z-10 overflow-hidden"
+                                            style={{
+                                                left: cropBoxData.left,
+                                                top: cropBoxData.top,
+                                                width: cropBoxData.width,
+                                                height: cropBoxData.height,
+                                            }}
+                                        >
+                                            <img
+                                                src={template?.image_placeholders?.find(p => p.key === activeImageKey)?.referenceImageUrl}
+                                                alt="Reference Guide"
+                                                className="w-full h-full object-cover opacity-40"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="p-6 bg-black/40 border-t border-white/10 flex justify-end gap-3">
@@ -718,10 +743,10 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                     ref={videoRef}
                                     src={template.preview_url}
                                     className="w-full h-full object-cover"
-                                    autoPlay
                                     loop
                                     muted
                                     playsInline
+                                    controls
                                 />
                             ) : (
                                 <div className="flex flex-col items-center gap-4 text-white/20">
@@ -752,7 +777,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 {template.image_placeholders?.map((placeholder) => (
                                     <div key={placeholder.key} className="space-y-4">
                                         <label className="text-[11px] font-bold text-gray-500 uppercase flex items-center justify-between">
-                                            {placeholder.label}
+                                            <span>{placeholder.label}</span>
                                             <span className="text-gray-600 font-mono text-[9px]">{placeholder.aspectRatio}</span>
                                         </label>
                                         <div className="relative group/upload">
@@ -763,27 +788,66 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                                 accept="image/*"
                                                 onChange={(e) => handleFileChange(e, placeholder)}
                                             />
-                                            <label
-                                                htmlFor={`upload-${placeholder.key}`}
-                                                onClick={() => seekTo(placeholder.previewTimestamp)}
-                                                className="aspect-square w-full bg-white/[0.02] border border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-white/[0.04] hover:border-indigo-500/50 transition-all p-4 text-center group relative overflow-hidden"
+                                            <div
+                                                onClick={() => {
+                                                    if (activePlaceholder !== placeholder.key) {
+                                                        setActivePlaceholder(placeholder.key);
+                                                        seekTo(placeholder.previewTimestamp);
+                                                    }
+                                                }}
+                                                style={{ aspectRatio: parseAspectRatio(placeholder.aspectRatio).ratio }}
+                                                className={`w-full rounded-2xl flex flex-col items-center justify-center gap-4 transition-all p-4 text-center group relative overflow-hidden ${activePlaceholder === placeholder.key
+                                                    ? 'bg-indigo-500/5 border-2 border-indigo-500/50 shadow-[0_0_20px_rgba(79,70,229,0.2)]'
+                                                    : 'bg-white/[0.02] border border-dashed border-white/10 cursor-pointer hover:bg-white/[0.04] hover:border-white/20'
+                                                    }`}
                                             >
+
                                                 {images[placeholder.key] ? (
                                                     <div className="relative w-full h-full flex items-center justify-center">
-                                                        <img src={images[placeholder.key]!} alt={placeholder.label} className="max-w-full max-h-full object-contain rounded-lg" />
-                                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                                                            <span className="text-[10px] font-bold text-white flex items-center gap-1"><Upload className="w-3 h-3" /> Change</span>
-                                                        </div>
+                                                        {/* Reference image behind user image with low opacity */}
+                                                        {placeholder.referenceImageUrl && (
+                                                            <img
+                                                                src={placeholder.referenceImageUrl}
+                                                                alt="Reference"
+                                                                className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none"
+                                                            />
+                                                        )}
+                                                        <img src={images[placeholder.key]!} alt={placeholder.label} className="max-w-full max-h-full object-contain rounded-lg z-10" />
+                                                        {activePlaceholder === placeholder.key && (
+                                                            <label
+                                                                htmlFor={`upload-${placeholder.key}`}
+                                                                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center cursor-pointer z-20"
+                                                            >
+                                                                <span className="text-[10px] font-bold text-white flex items-center gap-1"><Upload className="w-3 h-3" /> Change</span>
+                                                            </label>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <>
-                                                        <div className="w-12 h-12 bg-indigo-500/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                                                            <Upload className="w-5 h-5 text-indigo-400" />
+                                                        {/* Reference image as background guide */}
+                                                        {placeholder.referenceImageUrl && (
+                                                            <img
+                                                                src={placeholder.referenceImageUrl}
+                                                                alt="Reference"
+                                                                className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none rounded-2xl"
+                                                            />
+                                                        )}
+                                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all z-10 ${activePlaceholder === placeholder.key ? 'bg-indigo-500 text-white scale-110 shadow-lg' : 'bg-indigo-500/10 text-indigo-400 group-hover:scale-110'
+                                                            }`}>
+                                                            <Upload className="w-5 h-5" />
                                                         </div>
-                                                        <div>
-                                                            <p className="text-sm font-semibold text-white">Upload {placeholder.label}</p>
-                                                            <p className="text-[10px] text-gray-500 mt-1">{placeholder.aspectRatio}</p>
+                                                        <div className="z-10">
+                                                            <p className={`text-sm font-semibold ${activePlaceholder === placeholder.key ? 'text-white' : 'text-gray-400'}`}>
+                                                                {activePlaceholder === placeholder.key ? `Ready to Upload` : `Select to View`}
+                                                            </p>
+                                                            <p className="text-[10px] text-gray-500 mt-1">{placeholder.label}</p>
                                                         </div>
+                                                        {activePlaceholder === placeholder.key && (
+                                                            <label
+                                                                htmlFor={`upload-${placeholder.key}`}
+                                                                className="absolute inset-0 cursor-pointer z-20"
+                                                            />
+                                                        )}
                                                     </>
                                                 )}
 
@@ -801,7 +865,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
-                                            </label>
+                                            </div>
                                             {images[placeholder.key] && (
                                                 <button
                                                     onClick={() => setImages(prev => ({ ...prev, [placeholder.key]: null }))}
@@ -819,14 +883,24 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                     <div className="space-y-6">
                                         {template.text_placeholders.map((placeholder) => (
                                             <div key={placeholder.key} className="space-y-3">
-                                                <label className="text-[11px] font-bold text-gray-500 uppercase">{placeholder.label}</label>
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-[11px] font-bold text-gray-500 uppercase">{placeholder.label}</label>
+                                                </div>
                                                 <div className="relative group">
-                                                    <Type className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-indigo-400 transition-colors" />
+                                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                                        <Type className="w-4 h-4 text-gray-600 group-focus-within:text-indigo-400 transition-colors" />
+                                                    </div>
                                                     <input
-                                                        className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 focus:outline-none transition-all placeholder:text-gray-700"
+                                                        className={`w-full bg-white/[0.03] border rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none transition-all placeholder:text-gray-700 ${activePlaceholder === placeholder.key
+                                                            ? 'border-indigo-500/50 ring-1 ring-indigo-500/50 bg-indigo-500/5'
+                                                            : 'border-white/10 hover:border-white/20'
+                                                            }`}
                                                         value={texts[placeholder.key] || ""}
                                                         onChange={(e) => setTexts(prev => ({ ...prev, [placeholder.key]: e.target.value }))}
-                                                        onFocus={() => seekTo(placeholder.previewTimestamp)}
+                                                        onFocus={() => {
+                                                            setActivePlaceholder(placeholder.key);
+                                                            seekTo(placeholder.previewTimestamp);
+                                                        }}
                                                         placeholder={`Enter ${placeholder.label}...`}
                                                     />
                                                 </div>

@@ -24,7 +24,12 @@ export async function GET(
             .eq("user_id", userId)
             .single();
 
-        if (error) throw error;
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return NextResponse.json({ error: "Project not found" }, { status: 404 });
+            }
+            throw error;
+        }
 
         return NextResponse.json({ project: data });
     } catch (error) {

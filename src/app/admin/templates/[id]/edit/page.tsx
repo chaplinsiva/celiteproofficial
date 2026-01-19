@@ -14,6 +14,7 @@ interface ImagePlaceholder {
     label: string;
     aspectRatio: string;
     previewTimestamp?: number;
+    referenceImageUrl?: string;
 }
 
 interface TextPlaceholder {
@@ -64,6 +65,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [uploadProgress, setUploadProgress] = useState("");
+    const [referenceImageFiles, setReferenceImageFiles] = useState<Record<string, File | null>>({});
 
     useEffect(() => {
         fetchTemplate();
@@ -108,7 +110,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
         const nextNum = imagePlaceholders.length + 1;
         setImagePlaceholders([
             ...imagePlaceholders,
-            { key: `img${nextNum}`, label: `Image ${nextNum}`, aspectRatio: "16:9" }
+            { key: `img${nextNum}`, label: `Image ${nextNum}`, aspectRatio: "16:9", referenceImageUrl: "" }
         ]);
     };
 
@@ -167,6 +169,34 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
                 if (uploadData.urls?.preview_url) newPreviewUrl = uploadData.urls.preview_url;
                 if (uploadData.urls?.thumbnail_url) newThumbnailUrl = uploadData.urls.thumbnail_url;
                 if (uploadData.urls?.source_url) newSourceUrl = uploadData.urls.source_url;
+            }
+
+            // Upload reference images for placeholders
+            const refUploadKeys = Object.keys(referenceImageFiles).filter(k => referenceImageFiles[k]);
+            if (refUploadKeys.length > 0) {
+                setUploadProgress("Uploading reference images...");
+                for (const key of refUploadKeys) {
+                    const file = referenceImageFiles[key];
+                    if (!file) continue;
+
+                    const formData = new FormData();
+                    formData.append("slug", slug);
+                    formData.append("reference", file);
+                    formData.append("key", key);
+
+                    const refRes = await fetch("/api/admin/upload", {
+                        method: "POST",
+                        body: formData,
+                    });
+                    const refData = await refRes.json();
+
+                    if (refData.urls?.reference_url) {
+                        const idx = imagePlaceholders.findIndex(p => p.key === key);
+                        if (idx !== -1) {
+                            imagePlaceholders[idx].referenceImageUrl = refData.urls.reference_url;
+                        }
+                    }
+                }
             }
 
             setUploadProgress("Saving changes...");
@@ -410,20 +440,22 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
                                 {imagePlaceholders.map((placeholder, index) => (
                                     <div
                                         key={index}
-                                        className="flex items-center gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-xl"
+                                        className="flex items-start gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-xl"
                                     >
-                                        <div className="flex-1 grid grid-cols-4 gap-3">
+                                        <div className="flex-1 grid grid-cols-5 gap-3">
                                             <input
                                                 type="text"
                                                 value={placeholder.key}
                                                 onChange={(e) => updateImagePlaceholder(index, "key", e.target.value)}
                                                 className="bg-white/[0.03] border border-white/10 rounded-lg py-2 px-3 text-xs text-white focus:outline-none"
+                                                placeholder="Key"
                                             />
                                             <input
                                                 type="text"
                                                 value={placeholder.label}
                                                 onChange={(e) => updateImagePlaceholder(index, "label", e.target.value)}
                                                 className="bg-white/[0.03] border border-white/10 rounded-lg py-2 px-3 text-xs text-white focus:outline-none"
+                                                placeholder="Label"
                                             />
                                             <input
                                                 type="text"
@@ -440,6 +472,33 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
                                                 placeholder="Sec"
                                                 step="0.1"
                                             />
+                                            {/* Reference Image Upload */}
+                                            <div className="relative">
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    id={`ref-${placeholder.key}`}
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) {
+                                                            setReferenceImageFiles(prev => ({ ...prev, [placeholder.key]: file }));
+                                                        }
+                                                    }}
+                                                />
+                                                <label
+                                                    htmlFor={`ref-${placeholder.key}`}
+                                                    className="flex items-center justify-center h-full w-full bg-white/[0.03] border border-dashed border-white/10 rounded-lg text-xs text-gray-500 hover:border-indigo-500/50 hover:text-indigo-400 cursor-pointer transition-all overflow-hidden"
+                                                >
+                                                    {referenceImageFiles[placeholder.key] ? (
+                                                        <span className="text-emerald-400 truncate px-1">{referenceImageFiles[placeholder.key]?.name.slice(0, 8)}...</span>
+                                                    ) : placeholder.referenceImageUrl ? (
+                                                        <img src={placeholder.referenceImageUrl} alt="Ref" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <span>Ref Img</span>
+                                                    )}
+                                                </label>
+                                            </div>
                                         </div>
                                         <button
                                             type="button"

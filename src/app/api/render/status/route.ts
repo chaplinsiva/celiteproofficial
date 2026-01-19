@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({
                 status: job.status,
                 outputUrl: job.output_url,
+                thumbnailUrls: job.thumbnail_urls,
                 error: job.error_message,
             });
         }
@@ -55,64 +56,96 @@ export async function GET(request: NextRequest) {
         }
 
         const render = await plainlyClient.getRenderStatus(job.plainly_render_id);
+        console.log(`[DEBUG] Plainly Response for ${job.plainly_render_id}:`, JSON.stringify(render, null, 2));
+        console.log(`Plainly render ${job.plainly_render_id} state: ${render.state}`, {
+            hasThumbnails: !!render.thumbnailUris,
+            thumbnailCount: render.thumbnailUris?.length,
+            hasOutput: !!render.output
+        });
 
-        if (render.state === "DONE" && render.output) {
-            // Download and upload to R2
+        // If thumbnails are available on Plainly, transfer them to our CDN
+        const hasPlainlyThumbnails = render.thumbnailUris &&
+            render.thumbnailUris.length > 0 &&
+            render.thumbnailUris.some(url => url.includes("plainlyvideos.com"));
+
+        if (hasPlainlyThumbnails) {
+            console.log(`[DEBUG] Transferring ${render.thumbnailUris?.length} thumbnails to CDN for job ${renderJobId}`);
             try {
-                const videoRes = await fetch(render.output);
-                const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
-                const timestamp = Date.now();
-                const path = `renders/${job.user_id}/${timestamp}.mp4`;
-                const r2Url = await uploadToR2(videoBuffer, path, "video/mp4");
-
-                // Update job as completed
-                await supabaseAdmin
-                    .from("render_jobs")
-                    .update({
-                        status: "completed",
-                        output_url: r2Url,
-                        updated_at: new Date().toISOString(),
+                const cdnThumbnailUrls = await Promise.all(
+                    render.thumbnailUris!.map(async (uri, index) => {
+                        const res = await fetch(uri);
+                        if (!res.ok) throw new Error(`Failed to download thumbnail: ${res.statusText}`);
+                        const buffer = Buffer.from(await res.arrayBuffer());
+                        const timestamp = Date.now();
+                        const path = `thumbnails/${job.user_id}/${timestamp}-${index}.jpg`;
+                        return await uploadToR2(buffer, path, "image/jpeg");
                     })
+                );
+
+                const { error: updateError } = await supabaseAdmin
+                    .from("render_jobs")
+                    .update({ thumbnail_urls: cdnThumbnailUrls })
                     .eq("id", renderJobId);
 
-                // Cleanup: Delete temporary Plainly project and render
-                if (job.plainly_project_id || job.plainly_render_id) {
-                    try {
-                        if (job.plainly_project_id) {
-                            await plainlyClient.deleteProject(job.plainly_project_id);
-                            console.log(`Cleaned up Plainly project: ${job.plainly_project_id}`);
-                        }
-                        if (job.plainly_render_id) {
-                            await plainlyClient.deleteRender(job.plainly_render_id);
-                            console.log(`Cleaned up Plainly render: ${job.plainly_render_id}`);
-                        }
-                    } catch (cleanupError) {
-                        console.error("Failed to cleanup Plainly resources:", cleanupError);
-                    }
+                if (!updateError) {
+                    job.thumbnail_urls = cdnThumbnailUrls;
+                    console.log(`[DEBUG] Successfully migrated thumbnails to CDN for job ${renderJobId}`);
                 }
-
-                return NextResponse.json({
-                    status: "completed",
-                    outputUrl: r2Url,
-                });
-            } catch (uploadError) {
-                console.error("Failed to upload to R2:", uploadError);
-
-                // Still return Plainly URL if R2 fails
-                await supabaseAdmin
-                    .from("render_jobs")
-                    .update({
-                        status: "completed",
-                        output_url: render.output,
-                        updated_at: new Date().toISOString(),
-                    })
-                    .eq("id", renderJobId);
-
-                return NextResponse.json({
-                    status: "completed",
-                    outputUrl: render.output,
-                });
+            } catch (cdnError) {
+                console.error(`[ERROR] Failed to transfer thumbnails to CDN for job ${renderJobId}:`, cdnError);
             }
+        }
+
+        if (render.state === "DONE") {
+            // Update job status to completed first
+            const updateData: any = {
+                status: "completed",
+                updated_at: new Date().toISOString(),
+            };
+
+            // If it's a video render, handle video upload
+            if (render.output) {
+                try {
+                    console.log(`[DEBUG] Transferring video to CDN for job ${renderJobId}`);
+                    const videoRes = await fetch(render.output);
+                    const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+                    const timestamp = Date.now();
+                    const path = `renders/${job.user_id}/${timestamp}.mp4`;
+                    const r2Url = await uploadToR2(videoBuffer, path, "video/mp4");
+                    updateData.output_url = r2Url;
+                    job.output_url = r2Url;
+                } catch (uploadError) {
+                    console.error("Failed to upload video to R2:", uploadError);
+                    updateData.output_url = render.output; // Fallback to Plainly URL
+                    job.output_url = render.output;
+                }
+            }
+
+            // Sync with DB
+            await supabaseAdmin
+                .from("render_jobs")
+                .update(updateData)
+                .eq("id", renderJobId);
+
+            // Cleanup Plainly resources
+            try {
+                if (job.plainly_project_id) {
+                    await plainlyClient.deleteProject(job.plainly_project_id);
+                    console.log(`Cleaned up Plainly project: ${job.plainly_project_id}`);
+                }
+                if (job.plainly_render_id) {
+                    await plainlyClient.deleteRender(job.plainly_render_id);
+                    console.log(`Cleaned up Plainly render: ${job.plainly_render_id}`);
+                }
+            } catch (cleanupError) {
+                console.warn("Non-critical cleanup failed:", cleanupError);
+            }
+
+            return NextResponse.json({
+                status: "completed",
+                outputUrl: job.output_url,
+                thumbnailUrls: job.thumbnail_urls,
+            });
         }
 
         if (render.state === "FAILED") {
@@ -141,8 +174,9 @@ export async function GET(request: NextRequest) {
 
         // Still processing
         return NextResponse.json({
-            status: "processing",
+            status: job.status,
             plainlyState: render.state,
+            thumbnailUrls: job.thumbnail_urls,
         });
 
     } catch (error) {

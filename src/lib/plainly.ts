@@ -26,6 +26,7 @@ interface PlainlyRender {
     id: string;
     state: string;
     output?: string;
+    thumbnailUris?: string[];
 }
 
 interface CompositionInfo {
@@ -363,15 +364,44 @@ class PlainlyClient {
      */
     async startRender(
         projectId: string,
-        templateId: string,
-        parameters: Record<string, string>
+        templateId: string | null,
+        parameters: Record<string, string | number | boolean>,
+        options?: {
+            thumbnails?: {
+                atSeconds?: number[];
+                format?: "PNG" | "JPG";
+                fromEncodedVideo?: boolean;
+            };
+            outputFormatSettings?: {
+                settingsTemplate?: "DRAFT" | "HD";
+                postEncodingType?: string;
+            };
+        }
     ): Promise<PlainlyRender> {
         // Plainly expects parameters as an object { key: value }, not an array
-        const requestBody = {
+        const requestBody: any = {
             projectId,
-            templateId,
-            parameters, // Direct object: { img1: "url", text1: "text" }
         };
+
+        if (templateId) {
+            requestBody.templateId = templateId;
+        }
+
+        requestBody.parameters = parameters;
+
+        if (options) {
+            if (options.outputFormatSettings) {
+                requestBody.outputFormatSettings = options.outputFormatSettings;
+            }
+            if (options.thumbnails) {
+                requestBody.options = {
+                    thumbnails: {
+                        ...options.thumbnails,
+                        fromEncodedVideo: options.thumbnails.fromEncodedVideo ?? false
+                    }
+                };
+            }
+        }
 
         console.log("Starting render with:", JSON.stringify(requestBody, null, 2));
 
@@ -393,13 +423,28 @@ class PlainlyClient {
      * Check render status
      */
     async getRenderStatus(renderId: string): Promise<PlainlyRender> {
-        const res = await fetch(`${PLAINLY_BASE_URL}/renders/${renderId}`, {
-            headers: this.headers,
-        });
+        let lastError: any;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                const res = await fetch(`${PLAINLY_BASE_URL}/renders/${renderId}`, {
+                    headers: this.headers,
+                });
 
-        if (!res.ok) throw new Error("Failed to get render status");
+                if (!res.ok) {
+                    const error = await res.text();
+                    throw new Error(`Failed to get render status: ${error}`);
+                }
 
-        return res.json();
+                return res.json();
+            } catch (error) {
+                lastError = error;
+                console.warn(`Attempt ${attempt + 1} to get render status failed:`, error);
+                if (attempt < 2) {
+                    await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+                }
+            }
+        }
+        throw lastError;
     }
 
     /**

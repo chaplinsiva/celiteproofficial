@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { templateId, userId } = body;
+        const { templateId, userId, projectId } = body;
 
         if (!templateId || !userId) {
             return NextResponse.json(
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
             notes: {
                 templateId,
                 userId,
+                projectId: projectId || "",
                 templateTitle: template.title,
             },
         });

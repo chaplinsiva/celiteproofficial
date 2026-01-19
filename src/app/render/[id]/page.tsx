@@ -9,7 +9,7 @@ import {
 import Link from "next/link";
 
 interface RenderStatus {
-    status: "pending" | "processing" | "completed" | "failed";
+    status: "pending" | "processing" | "completed" | "failed" | "sampling";
     outputUrl?: string;
     error?: string;
     plainlyState?: string;
@@ -58,9 +58,9 @@ export default function RenderPage({ params }: { params: Promise<{ id: string }>
     };
 
     const getProgressMessage = () => {
-        if (status.plainlyState === "QUEUED") return "In queue...";
+        if (status.plainlyState === "QUEUED") return "Starting render...";
         if (status.plainlyState === "IN_PROGRESS") return "Rendering video...";
-        if (status.plainlyState === "THROTTLED") return "Waiting for slot...";
+        if (status.plainlyState === "THROTTLED") return "Preparing render...";
         if (pollCount < 3) return "Initializing render...";
         if (pollCount < 10) return "Processing template...";
         return "Rendering your video...";
@@ -75,7 +75,7 @@ export default function RenderPage({ params }: { params: Promise<{ id: string }>
             >
 
                 {/* Processing State */}
-                {(status.status === "processing" || status.status === "pending") && (
+                {(status.status === "processing" || status.status === "pending" || status.status === "sampling") && (
                     <div className="text-center">
                         <div className="relative mb-8">
                             <div className="w-24 h-24 mx-auto rounded-full bg-indigo-500/10 flex items-center justify-center">
