@@ -3,7 +3,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 const S3_ENDPOINT = process.env.S3_ENDPOINT!;
 const S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID!;
 const S3_SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY!;
-const PUBLIC_URL_S3 = process.env.PUBLIC_URL_S3!;
+const PUBLIC_URL_S3 = process.env.PUBLIC_URL_S3 || process.env.NEXT_PUBLIC_S3_URL!;
 
 const r2Client = new S3Client({
     region: "auto",
