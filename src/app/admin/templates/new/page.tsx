@@ -13,12 +13,14 @@ interface ImagePlaceholder {
     key: string;
     label: string;
     aspectRatio: string;
+    previewTimestamp?: number;
 }
 
 interface TextPlaceholder {
     key: string;
     label: string;
     defaultValue: string;
+    previewTimestamp?: number;
 }
 
 export default function NewTemplatePage() {
@@ -80,7 +82,7 @@ export default function NewTemplatePage() {
         setImagePlaceholders(imagePlaceholders.filter((_, i) => i !== index));
     };
 
-    const updateImagePlaceholder = (index: number, field: keyof ImagePlaceholder, value: string) => {
+    const updateImagePlaceholder = (index: number, field: keyof ImagePlaceholder, value: string | number) => {
         const updated = [...imagePlaceholders];
         updated[index] = { ...updated[index], [field]: value };
         setImagePlaceholders(updated);
@@ -99,7 +101,7 @@ export default function NewTemplatePage() {
         setTextPlaceholders(textPlaceholders.filter((_, i) => i !== index));
     };
 
-    const updateTextPlaceholder = (index: number, field: keyof TextPlaceholder, value: string) => {
+    const updateTextPlaceholder = (index: number, field: keyof TextPlaceholder, value: string | number) => {
         const updated = [...textPlaceholders];
         updated[index] = { ...updated[index], [field]: value };
         setTextPlaceholders(updated);
@@ -376,7 +378,7 @@ export default function NewTemplatePage() {
                                         animate={{ opacity: 1 }}
                                         className="flex items-center gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-xl"
                                     >
-                                        <div className="flex-1 grid grid-cols-3 gap-3">
+                                        <div className="flex-1 grid grid-cols-4 gap-3">
                                             <input
                                                 type="text"
                                                 value={placeholder.key}
@@ -397,6 +399,14 @@ export default function NewTemplatePage() {
                                                 onChange={(e) => updateImagePlaceholder(index, "aspectRatio", e.target.value)}
                                                 className="bg-white/[0.03] border border-white/10 rounded-lg py-2 px-3 text-xs text-white focus:outline-none"
                                                 placeholder="1920x1080"
+                                            />
+                                            <input
+                                                type="number"
+                                                value={placeholder.previewTimestamp || ""}
+                                                onChange={(e) => updateImagePlaceholder(index, "previewTimestamp", e.target.value ? parseFloat(e.target.value) : 0)}
+                                                className="bg-white/[0.03] border border-white/10 rounded-lg py-2 px-3 text-xs text-white focus:outline-none"
+                                                placeholder="Sec"
+                                                step="0.1"
                                             />
                                         </div>
                                         <button
@@ -434,7 +444,7 @@ export default function NewTemplatePage() {
                                         animate={{ opacity: 1 }}
                                         className="flex items-center gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-xl"
                                     >
-                                        <div className="flex-1 grid grid-cols-3 gap-3">
+                                        <div className="flex-1 grid grid-cols-4 gap-3">
                                             <input
                                                 type="text"
                                                 value={placeholder.key}
@@ -455,6 +465,14 @@ export default function NewTemplatePage() {
                                                 onChange={(e) => updateTextPlaceholder(index, "defaultValue", e.target.value)}
                                                 className="bg-white/[0.03] border border-white/10 rounded-lg py-2 px-3 text-xs text-white focus:outline-none"
                                                 placeholder="Default value (optional)"
+                                            />
+                                            <input
+                                                type="number"
+                                                value={placeholder.previewTimestamp || ""}
+                                                onChange={(e) => updateTextPlaceholder(index, "previewTimestamp", e.target.value ? parseFloat(e.target.value) : 0)}
+                                                className="bg-white/[0.03] border border-white/10 rounded-lg py-2 px-3 text-xs text-white focus:outline-none"
+                                                placeholder="Sec"
+                                                step="0.1"
                                             />
                                         </div>
                                         <button

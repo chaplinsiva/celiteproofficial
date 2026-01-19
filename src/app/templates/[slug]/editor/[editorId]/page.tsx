@@ -19,12 +19,14 @@ interface ImagePlaceholder {
     key: string;
     label: string;
     aspectRatio: string;
+    previewTimestamp?: number;
 }
 
 interface TextPlaceholder {
     key: string;
     label: string;
     defaultValue: string;
+    previewTimestamp?: number;
 }
 
 interface Template {
@@ -98,10 +100,20 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
     const [targetDimensions, setTargetDimensions] = useState<{ width: number; height: number }>({ width: 1920, height: 1920 });
     const [uploadingFile, setUploadingFile] = useState<File | null>(null);
     const cropperRef = useRef<ReactCropperElement>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
 
     // Rendering State
     const [isRendering, setIsRendering] = useState(false);
     const [uploadingKeys, setUploadingKeys] = useState<Set<string>>(new Set());
+
+    const seekTo = (timestamp?: number) => {
+        if (timestamp !== undefined && videoRef.current) {
+            videoRef.current.currentTime = timestamp;
+            if (videoRef.current.paused) {
+                videoRef.current.play().catch(() => { }); // Autoplay if possible
+            }
+        }
+    };
 
     useEffect(() => {
         fetchTemplate();
@@ -703,6 +715,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
 
                             {template?.preview_url ? (
                                 <video
+                                    ref={videoRef}
                                     src={template.preview_url}
                                     className="w-full h-full object-cover"
                                     autoPlay
@@ -752,6 +765,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                             />
                                             <label
                                                 htmlFor={`upload-${placeholder.key}`}
+                                                onClick={() => seekTo(placeholder.previewTimestamp)}
                                                 className="aspect-square w-full bg-white/[0.02] border border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-white/[0.04] hover:border-indigo-500/50 transition-all p-4 text-center group relative overflow-hidden"
                                             >
                                                 {images[placeholder.key] ? (
@@ -812,6 +826,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                                         className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 focus:outline-none transition-all placeholder:text-gray-700"
                                                         value={texts[placeholder.key] || ""}
                                                         onChange={(e) => setTexts(prev => ({ ...prev, [placeholder.key]: e.target.value }))}
+                                                        onFocus={() => seekTo(placeholder.previewTimestamp)}
                                                         placeholder={`Enter ${placeholder.label}...`}
                                                     />
                                                 </div>
