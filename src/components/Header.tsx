@@ -39,9 +39,11 @@ const Header = () => {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-4">
         <nav className="flex items-center justify-between bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-4">
           <Link href="/" className="flex items-center gap-2">
-            <div className="bg-indigo-600 p-2 rounded-lg">
-              <Video className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src={`${process.env.NEXT_PUBLIC_S3_URL}/logos/02.png`}
+              alt="CelitePro Logo"
+              className="w-10 h-10 object-contain"
+            />
             <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
               CelitePro
             </span>

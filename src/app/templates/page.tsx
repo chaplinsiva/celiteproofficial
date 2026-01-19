@@ -178,21 +178,6 @@ export default function TemplatesPage() {
                 )}
             </div>
 
-            {/* Floating CTA for new users */}
-            <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-                <motion.div
-                    initial={{ y: 100 }}
-                    animate={{ y: 0 }}
-                    className="bg-indigo-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-6 backdrop-blur-xl border border-white/20"
-                >
-                    <div className="flex items-center gap-3">
-                        <Zap className="w-5 h-5 fill-current" />
-                        <span className="text-sm font-medium whitespace-nowrap">Upload your own After Effects template</span>
-                    </div>
-                    <div className="h-6 w-px bg-white/20" />
-                    <Link href="/admin/templates/new" className="text-sm font-bold hover:underline">Get Started</Link>
-                </motion.div>
-            </div>
         </main>
     );
 }

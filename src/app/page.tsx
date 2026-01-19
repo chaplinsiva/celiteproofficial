@@ -15,7 +15,7 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               { label: "Rendering Speed", value: "10x Faster", desc: "Our cloud engine processes 4K video faster than real-time." },
-              { label: "API Available", value: "REST & SDK", desc: "Integrate video automation into your existing applications." },
+              { label: "API Available", value: "REST & SDK", desc: "Integrate Video Editor tool features into your existing applications." },
               { label: "Templates", value: "500+", desc: "Curated collection of professional After Effects templates." }
             ].map((stat, i) => (
               <div key={i} className="p-8 rounded-3xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all group">

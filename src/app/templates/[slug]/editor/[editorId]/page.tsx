@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { Cropper, ReactCropperElement } from "react-cropper";
 import "cropperjs/dist/cropper.css";
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
 interface ImagePlaceholder {
     key: string;
@@ -83,6 +84,11 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
     const [images, setImages] = useState<{ [key: string]: string | null }>({});
     const [texts, setTexts] = useState<{ [key: string]: string }>({});
 
+    // Project State
+    const [projectId, setProjectId] = useState<string | null>(null);
+    const [projectName, setProjectName] = useState<string>("");
+    const [isSaving, setIsSaving] = useState(false);
+
     // Cropper State
     const [showCropper, setShowCropper] = useState(false);
     const [imageToCrop, setImageToCrop] = useState<string | null>(null);
@@ -98,15 +104,26 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
 
     useEffect(() => {
         fetchTemplate();
-        fetchUser();
     }, [editorId]);
 
-    const fetchUser = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            setUserId(user.id);
-        }
-    };
+    useEffect(() => {
+        const checkUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUserId(user.id);
+            } else {
+                toast.warning("You are in guest mode. Log in to save your creative progress!", {
+                    duration: 5000,
+                    action: {
+                        label: "Log In",
+                        onClick: () => router.push("/login")
+                    }
+                });
+            }
+        };
+        checkUser();
+    }, []);
+
 
     const fetchTemplate = async () => {
         try {
@@ -120,6 +137,28 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
 
             const t: Template = data.template;
             setTemplate(t);
+
+            // Check if editorId is a UUID (it might be a projectId)
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(editorId);
+
+            if (isUuid) {
+                // Try to fetch project data
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const projectRes = await fetch(`/api/projects/${editorId}?userId=${user.id}`);
+                    const projectData = await projectRes.json();
+                    if (projectRes.ok && projectData.project) {
+                        setProjectId(projectData.project.id);
+                        setProjectName(projectData.project.name);
+
+                        // Load saved configuration
+                        const config = projectData.project.configuration;
+                        if (config.images) setImages(config.images);
+                        if (config.texts) setTexts(config.texts);
+                        return; // Skip default initialization
+                    }
+                }
+            }
 
             // Initialize state from template placeholders
             const imgState: { [key: string]: string | null } = {};
@@ -140,6 +179,65 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
         }
     };
 
+    const handleSave = async (silent = false) => {
+        if (!template || !userId) {
+            if (!silent) toast.error("Please log in to save projects");
+            return null;
+        }
+
+        if (!silent) setIsSaving(true);
+
+        try {
+            let nameToSave = projectName;
+            if (!nameToSave) {
+                // Fetch project count to name it "Celite Project N"
+                const { data: countData } = await supabase
+                    .from("projects")
+                    .select("id", { count: "exact", head: true })
+                    .eq("user_id", userId);
+
+                const count = (countData?.length || 0) + 1;
+                nameToSave = `Celite Project ${count}`;
+                setProjectName(nameToSave);
+            }
+
+            const res = await fetch("/api/projects", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: projectId,
+                    userId,
+                    templateId: template.id,
+                    name: nameToSave,
+                    configuration: {
+                        images,
+                        texts
+                    }
+                })
+            });
+
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setProjectId(data.project.id);
+                if (!silent) {
+                    // Update URL if it was "new" or a placeholder
+                    if (editorId !== data.project.id) {
+                        router.replace(`/templates/${slug}/editor/${data.project.id}`);
+                    }
+                }
+                return data.project.id;
+            } else {
+                throw new Error(data.error || "Failed to save project");
+            }
+        } catch (error) {
+            console.error("Save error:", error);
+            if (!silent) toast.error(`Failed to save project: ${error}`);
+            return null;
+        } finally {
+            if (!silent) setIsSaving(false);
+        }
+    };
+
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>, placeholder: ImagePlaceholder) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -157,6 +255,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 setShowCropper(true);
             };
             reader.readAsDataURL(file);
+            e.target.value = ""; // Reset to allow re-selection
         }
     };
 
@@ -222,7 +321,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         }
                     } catch (err) {
                         console.error("Upload fetch error:", err);
-                        alert(`Failed to upload ${currentKey}. Please try again.`);
+                        toast.error(`Failed to upload ${currentKey}. Please try again.`);
                         // Reset image on failure so it doesn't get stuck in base64/uploading state
                         setImages(prev => ({ ...prev, [currentKey]: null }));
                     } finally {
@@ -248,32 +347,38 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
 
     const handleRender = async () => {
         if (!template || !userId) {
-            alert("Please log in to render videos");
+            toast.error("Please log in to render videos");
             return;
         }
 
         // 1. Check if any uploads are still in progress
         if (uploadingKeys.size > 0) {
-            alert("Please wait for your assets to finish uploading to the cloud.");
+            toast.warning("Please wait for your assets to finish uploading to the cloud.");
             return;
         }
 
         // 2. Check if all required images are uploaded and are remote URLs (not base64)
         const missingImages = template.image_placeholders?.filter(p => !images[p.key]);
         if (missingImages?.length > 0) {
-            alert(`Please upload: ${missingImages.map(p => p.label).join(", ")}`);
+            toast.warning(`Please upload: ${missingImages.map(p => p.label).join(", ")}`);
             return;
         }
 
         const stillBase64 = template.image_placeholders?.filter(p => images[p.key]?.startsWith("data:"));
         if (stillBase64?.length > 0) {
-            alert("Some assets are still synchronizing. Please wait a moment.");
+            toast.warning("Some assets are still synchronizing. Please wait a moment.");
             return;
         }
 
         setIsRendering(true);
 
         try {
+            // Auto-save before render
+            const savedProjectId = await handleSave(true);
+            if (!savedProjectId) {
+                throw new Error("Failed to auto-save project before rendering");
+            }
+
             // Step 1: Create payment order
             const orderRes = await fetch("/api/payment/create-order", {
                 method: "POST",
@@ -354,7 +459,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         router.push(`/render/${renderData.renderJobId}`);
                     } catch (error) {
                         console.error("Post-payment error:", error);
-                        alert(`Error: ${error}`);
+                        toast.error(`Error: ${error}`);
                         setIsRendering(false);
                     }
                 },
@@ -374,7 +479,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
 
         } catch (error) {
             console.error("Payment error:", error);
-            alert(`Payment failed: ${error}`);
+            toast.error(`Payment failed: ${error}`);
             setIsRendering(false);
         }
     };
@@ -469,16 +574,28 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                     </Link>
                     <div className="hidden xs:block h-4 w-[1px] bg-white/10 shrink-0" />
                     <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                        <span className="text-white font-semibold truncate text-sm md:text-base hidden sm:block">
-                            {template.title}
+                        <input
+                            type="text"
+                            value={projectName}
+                            onChange={(e) => setProjectName(e.target.value)}
+                            onBlur={() => handleSave(true)}
+                            placeholder="Celite Project 1"
+                            className="bg-transparent border-none text-white font-semibold truncate text-sm md:text-base focus:outline-none focus:ring-1 focus:ring-white/10 rounded px-1 min-w-[120px]"
+                        />
+                        <span className="hidden lg:inline-block text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded text-gray-400 shrink-0">
+                            {projectId ? "Saved" : "Draft"}
                         </span>
-                        <span className="hidden lg:inline-block text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded text-gray-400 shrink-0">Draft</span>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2 md:gap-3">
-                    <button className="hidden sm:flex items-center gap-2 px-4 py-2 hover:bg-white/5 rounded-lg text-sm transition-colors shrink-0">
-                        <Save className="w-4 h-4" /> Save
+                    <button
+                        onClick={() => handleSave()}
+                        disabled={isSaving}
+                        className="hidden sm:flex items-center gap-2 px-4 py-2 hover:bg-white/5 rounded-lg text-sm transition-colors shrink-0 disabled:opacity-50"
+                    >
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {isSaving ? "Saving..." : "Save"}
                     </button>
                     <button
                         onClick={handleRender}

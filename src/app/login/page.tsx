@@ -48,9 +48,11 @@ export default function Login() {
                     {/* Logo */}
                     <div className="flex flex-col items-center mb-10">
                         <Link href="/" className="flex items-center gap-2 mb-6">
-                            <div className="bg-indigo-600 p-2 rounded-xl">
-                                <Video className="w-6 h-6 text-white" />
-                            </div>
+                            <img
+                                src={`${process.env.NEXT_PUBLIC_S3_URL}/logos/02.png`}
+                                alt="CelitePro Logo"
+                                className="w-10 h-10 object-contain"
+                            />
                             <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
                                 CelitePro
                             </span>

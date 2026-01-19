@@ -1,60 +1,132 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
-import { motion } from "framer-motion";
+import { supabase } from "@/lib/supabase";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-    Plus, Layers, Search, Edit3, Trash2,
-    Video, Image as ImageIcon, FileText, ExternalLink
+    Layout, Video, Users, BarChart3,
+    ArrowLeft, Clock, CheckCircle2, AlertCircle,
+    RefreshCw, Search, ShieldCheck, ExternalLink, Settings
 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
-interface Template {
+interface AdminStats {
+    totalUsers: number;
+    totalProjects: number;
+    totalRenders: number;
+    completedRenders: number;
+}
+
+interface RenderJob {
     id: string;
-    slug: string;
-    title: string;
-    description: string;
-    category: string;
-    thumbnail_url: string;
-    image_placeholders: { key: string; label: string }[];
-    text_placeholders: { key: string; label: string }[];
+    status: string;
     created_at: string;
+    user_email?: string;
+    template_title?: string;
 }
 
 export default function AdminDashboard() {
-    const [templates, setTemplates] = useState<Template[]>([]);
     const [loading, setLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState("");
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [stats, setStats] = useState<AdminStats>({
+        totalUsers: 0,
+        totalProjects: 0,
+        totalRenders: 0,
+        completedRenders: 0
+    });
+    const [recentRenders, setRecentRenders] = useState<any[]>([]);
+    const router = useRouter();
 
     useEffect(() => {
-        fetchTemplates();
+        checkAdmin();
     }, []);
 
-    const fetchTemplates = async () => {
+    const checkAdmin = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            router.push("/login");
+            return;
+        }
+
+        const { data: adminData, error } = await supabase
+            .from("admins")
+            .select("*")
+            .eq("user_id", user.id)
+            .single();
+
+        if (error || !adminData) {
+            toast.error("Access denied. Admin only.");
+            router.push("/dashboard");
+            return;
+        }
+
+        setIsAdmin(true);
+        fetchAdminData();
+    };
+
+    const fetchAdminData = async () => {
         try {
-            const res = await fetch("/api/admin/templates");
-            const data = await res.json();
-            setTemplates(data.templates || []);
-        } catch (error) {
-            console.error("Error fetching templates:", error);
+            // Fetch Stats (Global) - Requires matching RLS or bypass (using client with anon key might be restricted)
+            // For now, we fetch what we can. Usually admin pages use a more privileged client or specific API.
+
+            const { count: usersCount } = await supabase
+                .from("profiles") // Assuming there's a profiles table for public user info
+                .select("*", { count: 'exact', head: true });
+
+            const { count: projectsCount } = await supabase
+                .from("projects")
+                .select("*", { count: 'exact', head: true });
+
+            const { data: rendersData, count: rendersCount } = await supabase
+                .from("render_jobs")
+                .select(`
+                    *,
+                    template:templates (title)
+                `)
+                .order("created_at", { ascending: false })
+                .limit(10);
+
+            const { count: completedCount } = await supabase
+                .from("render_jobs")
+                .select("*", { count: 'exact', head: true })
+                .eq("status", "completed");
+
+            setStats({
+                totalUsers: usersCount || 0,
+                totalProjects: projectsCount || 0,
+                totalRenders: rendersCount || 0,
+                completedRenders: completedCount || 0
+            });
+
+            setRecentRenders(rendersData || []);
+        } catch (err) {
+            console.error("Error fetching admin data:", err);
+            toast.error("Failed to load admin statistics");
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure you want to delete this template?")) return;
-
-        try {
-            await fetch(`/api/admin/templates/${id}`, { method: "DELETE" });
-            setTemplates((prev) => prev.filter((t) => t.id !== id));
-        } catch (error) {
-            console.error("Error deleting template:", error);
+    const getStatusIcon = (status: string) => {
+        switch (status) {
+            case "completed": return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
+            case "failed": return <AlertCircle className="w-4 h-4 text-red-400" />;
+            case "processing": return <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin" />;
+            default: return <Clock className="w-4 h-4 text-gray-400" />;
         }
     };
 
-    const filteredTemplates = templates.filter((t) =>
-        t.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-[#0A0A0B] flex items-center justify-center">
+                <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
+            </div>
+        );
+    }
+
+    if (!isAdmin) return null;
 
     return (
         <main className="min-h-screen bg-[#0A0A0B] text-gray-300">
@@ -62,161 +134,162 @@ export default function AdminDashboard() {
             <header className="border-b border-white/5 bg-black/40 backdrop-blur-xl sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <div className="bg-indigo-600 p-2 rounded-xl">
-                            <Video className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-white">Admin Panel</h1>
-                            <p className="text-xs text-gray-500">CelitePro Template Management</p>
+                        <Link href="/dashboard" className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                            <ArrowLeft className="w-5 h-5 text-gray-400" />
+                        </Link>
+                        <div className="flex items-center gap-2">
+                            <ShieldCheck className="w-6 h-6 text-indigo-500" />
+                            <h1 className="text-xl font-bold text-white">Admin Control</h1>
                         </div>
                     </div>
 
-                    <Link
-                        href="/admin/templates/new"
-                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-[0_0_20px_rgba(79,70,229,0.3)] transition-all"
-                    >
-                        <Plus className="w-4 h-4" />
-                        New Template
-                    </Link>
+                    <div className="flex items-center gap-4">
+                        <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+                            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Master Access</span>
+                        </div>
+                    </div>
                 </div>
             </header>
 
-            <div className="max-w-7xl mx-auto px-6 py-10">
-                {/* Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-indigo-500/10 rounded-xl flex items-center justify-center">
-                                <Layers className="w-5 h-5 text-indigo-400" />
+            <div className="max-w-7xl mx-auto px-6 py-12">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                    {[
+                        { label: "Total Renders", value: stats.totalRenders, icon: Video, color: "text-blue-400" },
+                        { label: "Completed", value: stats.completedRenders, icon: CheckCircle2, color: "text-emerald-400" },
+                        { label: "Total Projects", value: stats.totalProjects, icon: Layout, color: "text-purple-400" },
+                        { label: "Platform Users", value: stats.totalUsers, icon: Users, color: "text-orange-400" },
+                    ].map((stat, i) => (
+                        <div key={i} className="bg-white/[0.02] border border-white/5 rounded-2xl p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className={`p-2 rounded-lg bg-white/5 ${stat.color}`}>
+                                    <stat.icon className="w-5 h-5" />
+                                </div>
+                                <BarChart3 className="w-4 h-4 text-gray-700" />
                             </div>
-                            <div>
-                                <div className="text-2xl font-bold text-white">{templates.length}</div>
-                                <div className="text-xs text-gray-500 uppercase tracking-wider">Total Templates</div>
+                            <div className="text-2xl font-bold text-white mb-1">{stat.value}</div>
+                            <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{stat.label}</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Main Content Area */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Recent Activities */}
+                    <div className="lg:col-span-2 space-y-6">
+                        <div className="flex items-center justify-between mb-2">
+                            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Clock className="w-5 h-5 text-indigo-400" />
+                                Global Render Queue
+                            </h2>
+                            <button className="text-xs text-indigo-400 hover:text-indigo-300 font-bold transition-colors">View All</button>
+                        </div>
+
+                        <div className="bg-white/[0.02] border border-white/5 rounded-3xl overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-white/5 bg-white/[0.01]">
+                                            <th className="px-6 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Render ID / Template</th>
+                                            <th className="px-6 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</th>
+                                            <th className="px-6 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Created At</th>
+                                            <th className="px-6 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {recentRenders.map((render) => (
+                                            <tr key={render.id} className="hover:bg-white/[0.01] transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-bold text-white truncate max-w-[200px]">
+                                                            {render.template?.title || "Unknown Template"}
+                                                        </span>
+                                                        <span className="text-[10px] text-gray-600 font-mono underline decoration-white/5 decoration-dotted">
+                                                            {render.id.slice(0, 18)}...
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        {getStatusIcon(render.status)}
+                                                        <span className="text-xs font-semibold capitalize">{render.status}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="text-xs text-gray-500">
+                                                        {new Date(render.created_at).toLocaleString(undefined, {
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <Link
+                                                        href={`/render/${render.id}`}
+                                                        className="p-2 hover:bg-white/5 rounded-lg inline-flex items-center gap-2 text-gray-500 hover:text-white transition-all"
+                                                    >
+                                                        <ExternalLink className="w-4 h-4" />
+                                                    </Link>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
-                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center">
-                                <ImageIcon className="w-5 h-5 text-purple-400" />
-                            </div>
-                            <div>
-                                <div className="text-2xl font-bold text-white">
-                                    {templates.reduce((acc, t) => acc + (t.image_placeholders?.length || 0), 0)}
-                                </div>
-                                <div className="text-xs text-gray-500 uppercase tracking-wider">Image Layers</div>
-                            </div>
+
+                    {/* Quick Tools */}
+                    <div className="space-y-6">
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                            <Settings className="w-5 h-5 text-indigo-400" />
+                            Admin Actions
+                        </h2>
+
+                        <div className="space-y-3">
+                            {[
+                                { label: "Manage Templates", icon: Layout, desc: "Edit or add new video templates" },
+                                { label: "User Management", icon: Users, desc: "View and manage platform users" },
+                                { label: "Global Settings", icon: Settings, desc: "API keys and platform config" },
+                            ].map((tool, i) => (
+                                <button key={i} className="w-full p-4 bg-white/[0.02] border border-white/5 rounded-2xl flex items-center gap-4 hover:bg-white/[0.04] hover:border-white/10 transition-all text-left">
+                                    <div className="p-2.5 rounded-xl bg-white/5 text-gray-400">
+                                        <tool.icon className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-bold text-white">{tool.label}</div>
+                                        <div className="text-[10px] text-gray-500">{tool.desc}</div>
+                                    </div>
+                                </button>
+                            ))}
                         </div>
-                    </div>
-                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center">
-                                <FileText className="w-5 h-5 text-emerald-400" />
-                            </div>
-                            <div>
-                                <div className="text-2xl font-bold text-white">
-                                    {templates.reduce((acc, t) => acc + (t.text_placeholders?.length || 0), 0)}
+
+                        <div className="p-6 bg-indigo-500/5 border border-indigo-500/10 rounded-3xl relative overflow-hidden group">
+                            <div className="relative z-10">
+                                <h3 className="text-sm font-bold text-white mb-2">System Health</h3>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                                    <span className="text-xs text-emerald-500 font-bold uppercase tracking-wider">All Systems Operational</span>
                                 </div>
-                                <div className="text-xs text-gray-500 uppercase tracking-wider">Text Layers</div>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between text-[10px]">
+                                        <span className="text-gray-500">Plainly API</span>
+                                        <span className="text-emerald-400">Active</span>
+                                    </div>
+                                    <div className="flex justify-between text-[10px]">
+                                        <span className="text-gray-500">Supabase DB</span>
+                                        <span className="text-emerald-400">Active</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <ShieldCheck className="w-16 h-16 text-indigo-400" />
                             </div>
                         </div>
                     </div>
                 </div>
-
-                {/* Search */}
-                <div className="mb-8">
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                        <input
-                            type="text"
-                            placeholder="Search templates..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                        />
-                    </div>
-                </div>
-
-                {/* Templates Grid */}
-                {loading ? (
-                    <div className="text-center py-20 text-gray-500">Loading templates...</div>
-                ) : filteredTemplates.length === 0 ? (
-                    <div className="text-center py-20">
-                        <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Layers className="w-6 h-6 text-gray-600" />
-                        </div>
-                        <h3 className="text-lg font-bold text-white mb-2">No templates yet</h3>
-                        <p className="text-gray-500 mb-6">Create your first template to get started.</p>
-                        <Link
-                            href="/admin/templates/new"
-                            className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold"
-                        >
-                            <Plus className="w-4 h-4" /> Create Template
-                        </Link>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {filteredTemplates.map((template) => (
-                            <motion.div
-                                key={template.id}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="group bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden hover:bg-white/[0.04] transition-all"
-                            >
-                                <div className="aspect-video bg-gradient-to-br from-indigo-500/10 to-purple-500/5 relative">
-                                    {template.thumbnail_url ? (
-                                        <img
-                                            src={template.thumbnail_url}
-                                            alt={template.title}
-                                            className="w-full h-full object-cover"
-                                        />
-                                    ) : (
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                            <Video className="w-10 h-10 text-white/10" />
-                                        </div>
-                                    )}
-                                    <div className="absolute top-3 left-3 flex gap-2">
-                                        <span className="px-2 py-1 bg-black/60 backdrop-blur-md text-[10px] font-bold text-white rounded border border-white/10">
-                                            {template.image_placeholders?.length || 0} Images
-                                        </span>
-                                        <span className="px-2 py-1 bg-black/60 backdrop-blur-md text-[10px] font-bold text-white rounded border border-white/10">
-                                            {template.text_placeholders?.length || 0} Text
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="p-5">
-                                    <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">
-                                        {template.category}
-                                    </div>
-                                    <h3 className="text-lg font-bold text-white mb-2 truncate">{template.title}</h3>
-                                    <p className="text-xs text-gray-500 line-clamp-2 mb-4">{template.description || "No description"}</p>
-
-                                    <div className="flex items-center gap-2">
-                                        <Link
-                                            href={`/admin/templates/${template.id}/edit`}
-                                            className="flex-1 py-2 bg-white/5 border border-white/10 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-indigo-600 hover:border-indigo-600 transition-all"
-                                        >
-                                            <Edit3 className="w-3 h-3" /> Edit
-                                        </Link>
-                                        <Link
-                                            href={`/templates/${template.slug}`}
-                                            className="py-2 px-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all"
-                                        >
-                                            <ExternalLink className="w-3 h-3" />
-                                        </Link>
-                                        <button
-                                            onClick={() => handleDelete(template.id)}
-                                            className="py-2 px-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 hover:bg-red-500/20 transition-all"
-                                        >
-                                            <Trash2 className="w-3 h-3" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </div>
-                )}
             </div>
         </main>
     );

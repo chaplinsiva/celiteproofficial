@@ -20,19 +20,19 @@ const Hero = () => {
                 >
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-indigo-400 text-sm font-medium mb-6">
                         <Sparkles className="w-4 h-4" />
-                        <span>AI-Powered Video Automation</span>
+                        <span>Professional Video Editor tool</span>
                     </div>
 
                     <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-white mb-6">
-                        Automate Your <br />
+                        The Ultimate <br />
                         <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
-                            Video Workflow
+                            Video Editor tool
                         </span>
                     </h1>
 
                     <p className="max-w-2xl mx-auto text-base md:text-lg text-gray-400 mb-10 leading-relaxed px-4">
-                        Create professional videos in seconds with our automated editing engine.
-                        Connect your data, pick a template, and let CelitePro do the rest.
+                        Create professional videos in seconds with our powerful Video Editor tool.
+                        Pick a template, customize your assets, and get stunning results instantly.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
