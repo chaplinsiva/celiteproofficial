@@ -55,120 +55,31 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        const render = await plainlyClient.getRenderStatus(job.plainly_render_id);
-        console.log(`[DEBUG] Plainly Response for ${job.plainly_render_id}:`, JSON.stringify(render, null, 2));
-        console.log(`Plainly render ${job.plainly_render_id} state: ${render.state}`, {
-            hasThumbnails: !!render.thumbnailUris,
-            thumbnailCount: render.thumbnailUris?.length,
-            hasOutput: !!render.output
-        });
-
-        // If thumbnails are available on Plainly, transfer them to our CDN
-        const hasPlainlyThumbnails = render.thumbnailUris &&
-            render.thumbnailUris.length > 0 &&
-            render.thumbnailUris.some(url => url.includes("plainlyvideos.com"));
-
-        if (hasPlainlyThumbnails) {
-            console.log(`[DEBUG] Transferring ${render.thumbnailUris?.length} thumbnails to CDN for job ${renderJobId}`);
-            try {
-                const cdnThumbnailUrls = await Promise.all(
-                    render.thumbnailUris!.map(async (uri, index) => {
-                        const res = await fetch(uri);
-                        if (!res.ok) throw new Error(`Failed to download thumbnail: ${res.statusText}`);
-                        const buffer = Buffer.from(await res.arrayBuffer());
-                        const timestamp = Date.now();
-                        const path = `thumbnails/${job.user_id}/${timestamp}-${index}.jpg`;
-                        return await uploadToR2(buffer, path, "image/jpeg");
-                    })
-                );
-
-                const { error: updateError } = await supabaseAdmin
-                    .from("render_jobs")
-                    .update({ thumbnail_urls: cdnThumbnailUrls })
-                    .eq("id", renderJobId);
-
-                if (!updateError) {
-                    job.thumbnail_urls = cdnThumbnailUrls;
-                    console.log(`[DEBUG] Successfully migrated thumbnails to CDN for job ${renderJobId}`);
-                }
-            } catch (cdnError) {
-                console.error(`[ERROR] Failed to transfer thumbnails to CDN for job ${renderJobId}:`, cdnError);
-            }
+        // Check Plainly render status only if DB says processing
+        if (!job.plainly_render_id) {
+            return NextResponse.json({
+                status: "processing",
+                message: "Waiting for render to start...",
+            });
         }
 
+        const render = await plainlyClient.getRenderStatus(job.plainly_render_id);
+
         if (render.state === "DONE") {
-            // Update job status to completed first
-            const updateData: any = {
-                status: "completed",
-                updated_at: new Date().toISOString(),
-            };
-
-            // If it's a video render, handle video upload
-            if (render.output) {
-                try {
-                    console.log(`[DEBUG] Transferring video to CDN for job ${renderJobId}`);
-                    const videoRes = await fetch(render.output);
-                    const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
-                    const timestamp = Date.now();
-                    const path = `renders/${job.user_id}/${timestamp}.mp4`;
-                    const r2Url = await uploadToR2(videoBuffer, path, "video/mp4");
-                    updateData.output_url = r2Url;
-                    job.output_url = r2Url;
-                } catch (uploadError) {
-                    console.error("Failed to upload video to R2:", uploadError);
-                    updateData.output_url = render.output; // Fallback to Plainly URL
-                    job.output_url = render.output;
-                }
-            }
-
-            // Sync with DB
-            await supabaseAdmin
-                .from("render_jobs")
-                .update(updateData)
-                .eq("id", renderJobId);
-
-            // Cleanup Plainly resources
-            try {
-                if (job.plainly_project_id) {
-                    await plainlyClient.deleteProject(job.plainly_project_id);
-                    console.log(`Cleaned up Plainly project: ${job.plainly_project_id}`);
-                }
-                if (job.plainly_render_id) {
-                    await plainlyClient.deleteRender(job.plainly_render_id);
-                    console.log(`Cleaned up Plainly render: ${job.plainly_render_id}`);
-                }
-            } catch (cleanupError) {
-                console.warn("Non-critical cleanup failed:", cleanupError);
-            }
-
+            // The background process should handle this, but if the user reaches here
+            // and the DB isn't updated, let's just report the results from Plainly.
+            // We don't perform cleanup here anymore to avoid race conditions with the processor.
             return NextResponse.json({
                 status: "completed",
-                outputUrl: job.output_url,
-                thumbnailUrls: job.thumbnail_urls,
+                outputUrl: render.output || job.output_url,
+                thumbnailUrls: render.thumbnailUris || job.thumbnail_urls,
             });
         }
 
         if (render.state === "FAILED") {
-            await supabaseAdmin
-                .from("render_jobs")
-                .update({
-                    status: "failed",
-                    error_message: "Render failed in Plainly",
-                    updated_at: new Date().toISOString(),
-                })
-                .eq("id", renderJobId);
-
-            // Cleanup on failure too
-            if (job.plainly_project_id || job.plainly_render_id) {
-                try {
-                    if (job.plainly_project_id) await plainlyClient.deleteProject(job.plainly_project_id);
-                    if (job.plainly_render_id) await plainlyClient.deleteRender(job.plainly_render_id);
-                } catch { }
-            }
-
             return NextResponse.json({
                 status: "failed",
-                error: "Render failed",
+                error: "Render failed in Plainly",
             });
         }
 

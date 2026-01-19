@@ -1,5 +1,6 @@
 import { plainlyClient } from "@/lib/plainly";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { uploadToR2 } from "@/lib/r2";
 
 /**
  * Shared render processing logic
@@ -134,6 +135,87 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
             .eq("id", renderJobId);
 
         console.log(`${isSample ? "Sample" : "Full"} render started successfully for job ${renderJobId}`);
+
+        // --- BACKGROUND COMPLETION & CLEANUP ---
+        // Wait for render to complete (up to 5 mins)
+        console.log(`Waiting for render ${plainlyRender.id} to complete...`);
+        const completedRender = await plainlyClient.waitForRender(plainlyRender.id);
+        console.log(`Render ${plainlyRender.id} completed with state: ${completedRender.state}`);
+
+        const updateData: any = {
+            status: "completed",
+            updated_at: new Date().toISOString(),
+        };
+
+        // Transfer thumbnails to CDN
+        if (completedRender.thumbnailUris && completedRender.thumbnailUris.length > 0) {
+            console.log(`Transferring ${completedRender.thumbnailUris.length} thumbnails to CDN...`);
+            try {
+                const cdnThumbnails = await Promise.all(
+                    completedRender.thumbnailUris.map(async (uri, index) => {
+                        const res = await fetch(uri);
+                        const buffer = Buffer.from(await res.arrayBuffer());
+                        const path = `thumbnails/${job.user_id}/${Date.now()}-${index}.jpg`;
+                        return await uploadToR2(buffer, path, "image/jpeg");
+                    })
+                );
+                updateData.thumbnail_urls = cdnThumbnails;
+            } catch (e) {
+                console.error("Failed to transfer thumbnails:", e);
+            }
+        }
+
+        // Transfer video output to CDN
+        if (completedRender.output) {
+            console.log("Transferring video output to CDN...");
+            try {
+                const videoRes = await fetch(completedRender.output);
+                const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+                const path = `renders/${job.user_id}/${Date.now()}.mp4`;
+                const r2Url = await uploadToR2(videoBuffer, path, "video/mp4");
+                updateData.output_url = r2Url;
+            } catch (e) {
+                console.error("Failed to transfer video:", e);
+                updateData.output_url = completedRender.output; // Fallback
+            }
+        }
+
+        // Final DB update
+        await supabaseAdmin
+            .from("render_jobs")
+            .update(updateData)
+            .eq("id", renderJobId);
+
+        console.log(`Job ${renderJobId} marked as completed.`);
+
+        // --- SAFE CLEANUP ---
+        // We delete the project ONLY if no other active jobs (processing/sampling) are using it.
+        // This ensures the project reuse feature doesn't break concurrent renders.
+        const { data: activeJobs } = await supabaseAdmin
+            .from("render_jobs")
+            .select("id")
+            .eq("plainly_project_id", plainlyProjectId)
+            .in("status", ["processing", "sampling"])
+            .neq("id", renderJobId);
+
+        if (!activeJobs || activeJobs.length === 0) {
+            console.log(`Safely deleting Plainly project ${plainlyProjectId} (no other active jobs).`);
+            try {
+                await plainlyClient.deleteProject(plainlyProjectId!);
+            } catch (cleanupErr) {
+                console.warn("Project cleanup failed:", cleanupErr);
+            }
+        } else {
+            console.log(`Skipping project deletion; ${activeJobs.length} other jobs are still using it.`);
+        }
+
+        // Always delete the specific render resource
+        try {
+            await plainlyClient.deleteRender(plainlyRender.id);
+        } catch (cleanupErr) {
+            console.warn("Render cleanup failed:", cleanupErr);
+        }
+
         return { success: true, renderId: plainlyRender.id };
 
     } catch (error) {
@@ -146,9 +228,6 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
                 error_message: String(error),
             })
             .eq("id", renderJobId);
-
-        // Only delete project if we just created it and it failed. 
-        // For now, we'll avoid deleting to allow reuse of correctly created projects.
 
         throw error;
     }
