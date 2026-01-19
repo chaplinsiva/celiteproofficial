@@ -599,8 +599,8 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 </div>
                             </div>
 
-                            <div className="p-4 sm:p-8 pt-0 flex-1 flex items-center justify-center relative bg-black/40 overflow-hidden">
-                                <div className="relative w-full h-[300px] sm:h-[450px]">
+                            <div className="p-2 sm:p-8 pt-0 flex-1 flex items-center justify-center relative bg-black/40 overflow-hidden min-h-[300px]">
+                                <div className="relative w-full h-full min-h-[250px] max-h-[60vh]">
                                     <Cropper
                                         src={imageToCrop || ""}
                                         style={{ height: "100%", width: "100%" }}

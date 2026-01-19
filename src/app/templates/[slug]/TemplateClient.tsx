@@ -3,7 +3,7 @@
 import React from "react";
 import Header from "@/components/Header";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Sparkles, Clock, Layers, Share2, Edit3, ArrowLeft, Image as ImageIcon, Type, User, Check } from "lucide-react";
+import { Play, Sparkles, Clock, Layers, Share2, Edit3, ArrowLeft, Image as ImageIcon, Type, User, Check, Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
@@ -39,6 +39,49 @@ export default function TemplateClient({ template }: { template: Template }) {
     const [showAlert, setShowAlert] = React.useState(false);
     const [copied, setCopied] = React.useState(false);
 
+    // Auth form state
+    const [authMode, setAuthMode] = React.useState<'signup' | 'login'>('signup');
+    const [email, setEmail] = React.useState('');
+    const [password, setPassword] = React.useState('');
+    const [fullName, setFullName] = React.useState('');
+    const [showPassword, setShowPassword] = React.useState(false);
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState<string | null>(null);
+
+    const handleAuth = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+
+        if (authMode === 'signup') {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: { data: { full_name: fullName } },
+            });
+
+            if (error) {
+                setError(error.message);
+                setLoading(false);
+            } else if (data.session) {
+                // Auto-confirmed
+                router.push(`/templates/${template.slug}/editor/${template.id}`);
+            } else {
+                // Confirmation required
+                alert("Check your email for confirmation!");
+                setShowAlert(false);
+            }
+        } else {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) {
+                setError(error.message);
+                setLoading(false);
+            } else {
+                router.push(`/templates/${template.slug}/editor/${template.id}`);
+            }
+        }
+    };
+
     const handleShare = async () => {
         const shareData = {
             title: `${template.title} | CelitePro`,
@@ -69,37 +112,119 @@ export default function TemplateClient({ template }: { template: Template }) {
 
             <AnimatePresence>
                 {showAlert && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            className="bg-[#111113] border border-white/10 p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl"
+                            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                            className="bg-[#111113] border border-white/10 p-6 sm:p-8 rounded-3xl max-w-md w-full shadow-2xl overflow-y-auto max-h-[90vh]"
                         >
-                            <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                                <User className="w-8 h-8 text-indigo-400" />
-                            </div>
-                            <h3 className="text-xl font-bold text-white mb-2">Almost There!</h3>
-                            <p className="text-gray-400 mb-8">Create an account or login to customize and render this template.</p>
-                            <div className="flex flex-col gap-3">
-                                <Link
-                                    href="/signup"
-                                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl transition-all shadow-xl"
-                                >
-                                    Join Now & Edit
-                                </Link>
-                                <div className="mt-2">
-                                    <p className="text-sm text-gray-500 mb-2">Already have an account?</p>
-                                    <Link
-                                        href="/login"
-                                        className="text-indigo-400 hover:text-indigo-300 font-bold text-sm"
-                                    >
-                                        Log In Here
-                                    </Link>
+                            <div className="flex flex-col items-center mb-6">
+                                <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center mb-4">
+                                    <User className="w-6 h-6 text-indigo-400" />
                                 </div>
+                                <h3 className="text-2xl font-bold text-white mb-1">
+                                    {authMode === 'signup' ? 'Create Account' : 'Welcome Back'}
+                                </h3>
+                                <p className="text-gray-400 text-sm">
+                                    {authMode === 'signup' ? 'Sign up to customize and render videos.' : 'Login to continue editing.'}
+                                </p>
+                            </div>
+
+                            <form onSubmit={handleAuth} className="space-y-4">
+                                {authMode === 'signup' && (
+                                    <div className="space-y-1.5 text-left">
+                                        <label className="text-xs font-medium text-gray-500 ml-1 uppercase tracking-wider">Full Name</label>
+                                        <div className="relative group">
+                                            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-indigo-400 transition-colors" />
+                                            <input
+                                                type="text"
+                                                placeholder="John Doe"
+                                                required
+                                                value={fullName}
+                                                onChange={(e) => setFullName(e.target.value)}
+                                                className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-11 pr-4 text-white placeholder:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-1.5 text-left">
+                                    <label className="text-xs font-medium text-gray-500 ml-1 uppercase tracking-wider">Email</label>
+                                    <div className="relative group">
+                                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-indigo-400 transition-colors" />
+                                        <input
+                                            type="email"
+                                            placeholder="you@example.com"
+                                            required
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-11 pr-4 text-white placeholder:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all text-sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5 text-left">
+                                    <label className="text-xs font-medium text-gray-500 ml-1 uppercase tracking-wider">Password</label>
+                                    <div className="relative group">
+                                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-indigo-400 transition-colors" />
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            placeholder="••••••••"
+                                            required
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-11 pr-11 text-white placeholder:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all text-sm"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white transition-colors"
+                                        >
+                                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {error && (
+                                    <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 p-3 rounded-lg">
+                                        {error}
+                                    </p>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-[0_10px_20px_rgba(79,70,229,0.3)] flex items-center justify-center gap-2 group disabled:opacity-50"
+                                >
+                                    {loading ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            {authMode === 'signup' ? 'Create Account & Edit' : 'Log In & Edit'}
+                                            <Check className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+
+                            <div className="mt-8 pt-6 border-t border-white/5 text-center">
+                                <p className="text-gray-500 text-sm mb-3">
+                                    {authMode === 'signup' ? 'Already have an account?' : "Don't have an account?"}
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        setAuthMode(authMode === 'signup' ? 'login' : 'signup');
+                                        setError(null);
+                                    }}
+                                    className="text-indigo-400 hover:text-indigo-300 font-bold transition-colors"
+                                >
+                                    {authMode === 'signup' ? 'Log In Instead' : 'Create New Account'}
+                                </button>
+
                                 <button
                                     onClick={() => setShowAlert(false)}
-                                    className="mt-4 text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                                    className="mt-6 block w-full text-xs text-gray-600 hover:text-gray-400 transition-colors"
                                 >
                                     Dismiss
                                 </button>
