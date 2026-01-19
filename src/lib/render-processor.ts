@@ -33,45 +33,25 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
             .update({ status: isSample ? "sampling" : "processing" })
             .eq("id", renderJobId);
 
-        // --- PROJECT MANAGEMENT (REUSE OR CREATE) ---
-        // Search for an existing project for this template
-        // We use a naming convention: render-[slug]
+        // --- PROJECT CREATION (ALWAYS SEPARATE) ---
+        console.log(`Creating fresh Plainly project for job ${renderJobId}...`);
         const projectBaseName = `render-${template.slug}`;
-        console.log(`Checking for existing project: ${projectBaseName}`);
 
-        let projectToUse: any = null;
-
-        try {
-            const existingProjects = await plainlyClient.getProjects();
-            // Find the most recent READY project for this template
-            projectToUse = existingProjects
-                .filter(p => p.name.startsWith(projectBaseName) && (p.status === "RENDER_READY" || (p as any).renderReady))
-                .sort((a, b) => b.id.localeCompare(a.id))[0]; // Use latest if multiple exist
-        } catch (e) {
-            console.warn("Failed to check for existing projects, will attempt to create new one:", e);
-        }
-
-        if (projectToUse) {
-            console.log("Reusing existing Plainly project:", projectToUse.id);
-            plainlyProjectId = projectToUse.id;
-        } else {
-            console.log("No ready project found. Creating new Plainly project...");
-            // Retry loop for project creation
-            for (let i = 0; i < MAX_RETRIES; i++) {
-                try {
-                    const projectName = `${projectBaseName}-${Date.now()}`;
-                    const project = await plainlyClient.createProject(
-                        projectName,
-                        template.source_url
-                    );
-                    plainlyProjectId = project.id;
-                    break;
-                } catch (e) {
-                    console.error(`Project creation attempt ${i + 1} failed:`, e);
-                    if (i === MAX_RETRIES - 1) throw e;
-                    // Exponential backoff: 2s, 4s, 8s
-                    await new Promise(r => setTimeout(r, Math.pow(2, i + 1) * 1000));
-                }
+        // Retry loop for project creation
+        for (let i = 0; i < MAX_RETRIES; i++) {
+            try {
+                const projectName = `${projectBaseName}-${renderJobId}-${Date.now()}`;
+                const project = await plainlyClient.createProject(
+                    projectName,
+                    template.source_url
+                );
+                plainlyProjectId = project.id;
+                break;
+            } catch (e) {
+                console.error(`Project creation attempt ${i + 1} failed:`, e);
+                if (i === MAX_RETRIES - 1) throw e;
+                // Exponential backoff: 2s, 4s, 8s
+                await new Promise(r => setTimeout(r, Math.pow(2, i + 1) * 1000));
             }
         }
 
@@ -85,13 +65,12 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
             .update({ plainly_project_id: plainlyProjectId })
             .eq("id", renderJobId);
 
-        // Wait for project analysis (if newly created)
+        // Wait for project analysis
         console.log("Verifying project is ready...");
         await plainlyClient.waitForProject(plainlyProjectId);
         console.log("Project is ready for rendering");
 
         // Create template with dynamic layers
-        // We ALWAYS create a fresh template for the project to ensure layer bindings are correct
         const plainlyTemplate = await plainlyClient.createTemplate(
             plainlyProjectId,
             `template-${template.slug}-${Date.now()}`,
@@ -188,25 +167,13 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
 
         console.log(`Job ${renderJobId} marked as completed.`);
 
-        // --- SAFE CLEANUP ---
-        // We delete the project ONLY if no other active jobs (processing/sampling) are using it.
-        // This ensures the project reuse feature doesn't break concurrent renders.
-        const { data: activeJobs } = await supabaseAdmin
-            .from("render_jobs")
-            .select("id")
-            .eq("plainly_project_id", plainlyProjectId)
-            .in("status", ["processing", "sampling"])
-            .neq("id", renderJobId);
-
-        if (!activeJobs || activeJobs.length === 0) {
-            console.log(`Safely deleting Plainly project ${plainlyProjectId} (no other active jobs).`);
-            try {
-                await plainlyClient.deleteProject(plainlyProjectId!);
-            } catch (cleanupErr) {
-                console.warn("Project cleanup failed:", cleanupErr);
-            }
-        } else {
-            console.log(`Skipping project deletion; ${activeJobs.length} other jobs are still using it.`);
+        // --- CLEANUP ---
+        // Always delete since we no longer reuse projects
+        console.log(`Deleting Plainly project ${plainlyProjectId} for job ${renderJobId}`);
+        try {
+            await plainlyClient.deleteProject(plainlyProjectId);
+        } catch (cleanupErr) {
+            console.warn("Project cleanup failed:", cleanupErr);
         }
 
         // Always delete the specific render resource
@@ -228,6 +195,12 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
                 error_message: String(error),
             })
             .eq("id", renderJobId);
+
+        if (plainlyProjectId) {
+            try {
+                await plainlyClient.deleteProject(plainlyProjectId);
+            } catch { }
+        }
 
         throw error;
     }
