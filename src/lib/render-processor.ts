@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
  */
 export async function processRenderJob(renderJobId: string, isSample: boolean = false) {
     let plainlyProjectId: string | null = null;
+    const MAX_RETRIES = 3;
 
     try {
         // Get render job and template data
@@ -31,40 +32,68 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
             .update({ status: isSample ? "sampling" : "processing" })
             .eq("id", renderJobId);
 
-        // Create Plainly project from ZIP
-        console.log(`Creating Plainly project (${isSample ? "SAMPLE" : "FULL"}) from:`, template.source_url);
-        const projectName = `render-${template.slug}-${Date.now()}`;
-        const project = await plainlyClient.createProject(
-            projectName,
-            template.source_url
-        );
+        // --- PROJECT MANAGEMENT (REUSE OR CREATE) ---
+        // Search for an existing project for this template
+        // We use a naming convention: render-[slug]
+        const projectBaseName = `render-${template.slug}`;
+        console.log(`Checking for existing project: ${projectBaseName}`);
 
-        if (!project || !project.id) {
-            throw new Error("Failed to get project ID from Plainly");
+        let projectToUse: any = null;
+
+        try {
+            const existingProjects = await plainlyClient.getProjects();
+            // Find the most recent READY project for this template
+            projectToUse = existingProjects
+                .filter(p => p.name.startsWith(projectBaseName) && (p.status === "RENDER_READY" || (p as any).renderReady))
+                .sort((a, b) => b.id.localeCompare(a.id))[0]; // Use latest if multiple exist
+        } catch (e) {
+            console.warn("Failed to check for existing projects, will attempt to create new one:", e);
         }
 
-        plainlyProjectId = project.id;
-        console.log("Plainly project created with ID:", plainlyProjectId);
+        if (projectToUse) {
+            console.log("Reusing existing Plainly project:", projectToUse.id);
+            plainlyProjectId = projectToUse.id;
+        } else {
+            console.log("No ready project found. Creating new Plainly project...");
+            // Retry loop for project creation
+            for (let i = 0; i < MAX_RETRIES; i++) {
+                try {
+                    const projectName = `${projectBaseName}-${Date.now()}`;
+                    const project = await plainlyClient.createProject(
+                        projectName,
+                        template.source_url
+                    );
+                    plainlyProjectId = project.id;
+                    break;
+                } catch (e) {
+                    console.error(`Project creation attempt ${i + 1} failed:`, e);
+                    if (i === MAX_RETRIES - 1) throw e;
+                    // Exponential backoff: 2s, 4s, 8s
+                    await new Promise(r => setTimeout(r, Math.pow(2, i + 1) * 1000));
+                }
+            }
+        }
+
+        if (!plainlyProjectId) {
+            throw new Error("Failed to get project ID");
+        }
 
         // Store project ID
         await supabaseAdmin
             .from("render_jobs")
-            .update({ plainly_project_id: project.id })
+            .update({ plainly_project_id: plainlyProjectId })
             .eq("id", renderJobId);
 
-        // Wait for project analysis
-        console.log("Waiting for project analysis to complete...");
-        await plainlyClient.waitForProject(project.id);
+        // Wait for project analysis (if newly created)
+        console.log("Verifying project is ready...");
+        await plainlyClient.waitForProject(plainlyProjectId);
         console.log("Project is ready for rendering");
 
         // Create template with dynamic layers
-        console.log("Creating template with placeholders:", {
-            images: template.image_placeholders?.map((p: any) => p.key),
-            texts: template.text_placeholders?.map((p: any) => p.key)
-        });
+        // We ALWAYS create a fresh template for the project to ensure layer bindings are correct
         const plainlyTemplate = await plainlyClient.createTemplate(
-            project.id,
-            `template-${template.slug}`,
+            plainlyProjectId,
+            `template-${template.slug}-${Date.now()}`,
             template.image_placeholders || [],
             template.text_placeholders || []
         );
@@ -74,7 +103,7 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
         if (isSample) {
             renderOptions = {
                 thumbnails: {
-                    atSeconds: [0], // One thumbnail for the dashboard
+                    atSeconds: [0],
                     format: "JPG",
                     fromEncodedVideo: true
                 },
@@ -83,25 +112,24 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
                     postEncodingType: "None"
                 }
             };
-            console.log("Free Preview render options (DRAFT):", JSON.stringify(renderOptions));
         }
 
         const parameters = job.parameters || {};
         console.log("Starting render with parameters:", JSON.stringify(parameters));
 
         const plainlyRender = await plainlyClient.startRender(
-            project.id,
-            isSample ? null : plainlyTemplate.id, // Omit templateId for samples to test project-level render if that's what user meant
+            plainlyProjectId,
+            isSample ? null : plainlyTemplate.id,
             parameters as Record<string, string>,
             renderOptions
         );
 
-        // Update job with Plainly render ID and Project ID for cleanup
+        // Update job with Plainly render ID
         await supabaseAdmin
             .from("render_jobs")
             .update({
                 plainly_render_id: plainlyRender.id,
-                plainly_project_id: project.id,
+                plainly_project_id: plainlyProjectId,
             })
             .eq("id", renderJobId);
 
@@ -111,7 +139,6 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
     } catch (error) {
         console.error(`Render processing error for job ${renderJobId}:`, error);
 
-        // Update job status to failed
         await supabaseAdmin
             .from("render_jobs")
             .update({
@@ -120,12 +147,8 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
             })
             .eq("id", renderJobId);
 
-        // Cleanup on error
-        if (plainlyProjectId) {
-            try {
-                await plainlyClient.deleteProject(plainlyProjectId);
-            } catch { }
-        }
+        // Only delete project if we just created it and it failed. 
+        // For now, we'll avoid deleting to allow reuse of correctly created projects.
 
         throw error;
     }

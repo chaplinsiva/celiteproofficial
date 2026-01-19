@@ -61,32 +61,44 @@ class PlainlyClient {
     private get headers(): HeadersInit {
         return {
             "Authorization": this.authHeader,
+            "Accept": "application/json",
             "Content-Type": "application/json",
         };
     }
 
     /**
      * Create a project from a ZIP file URL
-     * Plainly requires multipart/form-data, not JSON
      */
     async createProject(name: string, zipUrl: string): Promise<PlainlyProject> {
-        // Use FormData for multipart/form-data
-        const formData = new FormData();
-        formData.append("name", name);
-        formData.append("fileUrl", zipUrl);
-
+        // Plainly allows JSON for URL-based project creation
         const res = await fetch(`${PLAINLY_BASE_URL}/projects`, {
             method: "POST",
-            headers: {
-                "Authorization": this.authHeader,
-                // Don't set Content-Type - fetch will set it with boundary for FormData
-            },
-            body: formData,
+            headers: this.headers,
+            body: JSON.stringify({
+                name,
+                fileUrl: zipUrl,
+            }),
         });
 
         if (!res.ok) {
             const error = await res.text();
             throw new Error(`Failed to create project: ${error}`);
+        }
+
+        return res.json();
+    }
+
+    /**
+     * List all projects
+     */
+    async getProjects(): Promise<PlainlyProject[]> {
+        const res = await fetch(`${PLAINLY_BASE_URL}/projects`, {
+            headers: this.headers,
+        });
+
+        if (!res.ok) {
+            const error = await res.text();
+            throw new Error(`Failed to list projects: ${error}`);
         }
 
         return res.json();
