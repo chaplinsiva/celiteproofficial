@@ -74,7 +74,7 @@ const Hero = () => {
                                 </div>
                                 <h2 className="text-2xl sm:text-4xl font-bold text-white mb-2">Thalaivaru Kalavaramey</h2>
                                 <p className="text-gray-400 text-sm mb-6 max-w-md">Professional cinematic intro for the ultimate entrance. Fully customizable in seconds.</p>
-                                <Link href="/templates/thalaivaru-kalavaramey">
+                                <Link href="/templates/thalaivaru-kalavaramey-title-card">
                                     <button className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(79,70,229,0.4)] group/btn">
                                         Edit This Template
                                         <Wand2 className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />

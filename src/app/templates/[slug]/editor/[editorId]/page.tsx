@@ -722,7 +722,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 </div>
             </header>
 
-            <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden">
+            <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden relative">
                 {/* Sidebar - Horizontal on mobile, Vertical on desktop */}
                 <aside className="w-full lg:w-16 border-b lg:border-r lg:border-b-0 border-white/5 bg-black/20 flex lg:flex-col items-center justify-center lg:justify-start py-3 lg:py-6 gap-6 shrink-0 z-20">
                     <button className="p-3 text-indigo-400 bg-indigo-500/10 rounded-xl"><Layers className="w-5 h-5" /></button>
@@ -732,9 +732,9 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                     <button className="p-3 hover:bg-white/5 rounded-xl"><Settings className="w-5 h-5" /></button>
                 </aside>
 
-                <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+                <div className="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
                     {/* Canvas Preview */}
-                    <div className="w-full lg:flex-1 bg-black flex items-center justify-center p-6 lg:p-12 relative min-h-[300px] lg:min-h-0 sticky top-0 z-30 bg-[#070708] shadow-xl lg:shadow-none">
+                    <div className="w-full lg:flex-1 bg-black flex items-center justify-center p-4 lg:p-12 relative min-h-[300px] lg:min-h-0 sticky top-0 z-40 bg-[#070708] border-b border-white/5 shadow-2xl lg:shadow-none transition-all duration-300">
                         <div className="aspect-video w-full max-w-4xl bg-[#0F0F11] border border-white/10 rounded-2xl shadow-2xl relative overflow-hidden flex flex-col items-center justify-center group">
                             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5" />
 
