@@ -734,7 +734,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
 
                 <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
                     {/* Canvas Preview */}
-                    <div className="w-full lg:flex-1 bg-black flex items-center justify-center p-6 lg:p-12 relative min-h-[300px] lg:min-h-0">
+                    <div className="w-full lg:flex-1 bg-black flex items-center justify-center p-6 lg:p-12 relative min-h-[300px] lg:min-h-0 sticky top-0 z-30 bg-[#070708] shadow-xl lg:shadow-none">
                         <div className="aspect-video w-full max-w-4xl bg-[#0F0F11] border border-white/10 rounded-2xl shadow-2xl relative overflow-hidden flex flex-col items-center justify-center group">
                             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5" />
 
