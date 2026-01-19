@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CelitePro | Video Editor Tool
 
-## Getting Started
+CelitePro is a premium, cloud-based Video Editor tool designed for creators and brands. It enables professional-quality video generation by allowing users to customize After Effects templates directly in the browser through an intuitive, aesthetic interface.
 
-First, run the development server:
+![CelitePro Banner](https://pub-7badf4bfca46446ea06033d70f1216c4.r2.dev/logos/02.png)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🚀 Key Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 🎬 Professional Video Editing
+- **Dynamic Customization**: Replace images and edit texts in curated After Effects templates.
+- **Instant Preview**: High-quality thumbnails and video previews for all templates.
+- **Image Cropper**: Integrated precision cropping (1:1, 16:9, etc.) for logo replacements.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 💾 Project Persistence
+- **Save Progress**: Persistence for every project, allowing users to return and edit later.
+- **Auto-save**: Seamless background saving before every render initiated.
+- **Project Dashboard**: A centralized hub to manage saved projects and review render history.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### ⚡ Power Features
+- **Cloud Rendering**: Highly scalable video rendering powered by the Plainly API.
+- **Dynamic Metadata**: Automatic Open Graph and Twitter card generation for sharing template links.
+- **Admin Panel**: Dedicated administrative interface for usage monitoring and system oversight.
+- **Secure Payments**: Integrated Razorpay for seamless, secure credit-based rendering.
 
-## Learn More
+## 🛠 Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+### Frontend
+- **Framework**: [Next.js 15](https://nextjs.org/) (App Router)
+- **Styling**: Vanilla CSS (Premium Aesthetics) + Framer Motion (Animations).
+- **Icons**: Lucide React.
+- **Toasts**: Sonner.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Backend & Infrastructure
+- **Database**: [Supabase](https://supabase.com/) (PostgreSQL + RLS Security).
+- **Authentication**: Supabase Auth.
+- **Video Engine**: [Plainly Videos API](https://plainlyvideos.com/).
+- **Storage**: [Cloudflare R2](https://www.cloudflare.com/learning/cloud/what-is-cloud-storage/) (S3-compatible).
+- **Payments**: Razorpay.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🏗 Directory Structure
 
-## Deploy on Vercel
+- `src/app/`: Next.js App Router (Pages & API Routes).
+- `src/components/`: Reusable UI components (Header, Hero, Cropper).
+- `src/lib/`: Core library integrations (Supabase, Plainly, S3).
+- `src/app/dashboard/`: User-specific project and render management.
+- `src/app/admin/`: Platform administrative metrics.
+- `src/app/api/render/`: The core video rendering orchestration logic.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🔐 Environment Variables
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Reference `.env.example` for required variables:
+- `PLAINLY_API_KEY`: Video engine access.
+- `NEXT_PUBLIC_S3_URL` / `PUBLIC_URL_S3`: Storage base URLs.
+- `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_SECRET`: Database access.
+- `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`: Payment processing.
+
+---
+
+*Rebranded and updated on January 19, 2026.*

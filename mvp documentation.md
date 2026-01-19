@@ -1,81 +1,66 @@
-# CelitePro MVC Project Documentation (MVP)
+# CelitePro | Technical Documentation
 
-CelitePro is a premium cloud-based video generation platform that allows users to create professional-quality videos by customizing After Effects templates directly in the browser. 
-
----
-
-## 🛠 Tech Stack
-
-### Frontend
-- **Framework**: [Next.js 14](https://nextjs.org/) (App Router)
-- **Language**: TypeScript
-- **Styling**: Vanilla CSS with custom design system tokens.
-- **Image Processing**: [Cropperjs](https://github.com/fengyuanchen/cropperjs) for precise logo positioning.
-
-### Backend & Infrastructure
-- **API Runtime**: Next.js Edge & Node.js Runtimes.
-- **Database**: [Supabase](https://supabase.com/) (PostgreSQL + Real-time).
-- **Video Engine**: [Plainly Videos API](https://plainlyvideos.com/) for cloud After Effects rendering.
-- **Storage**: [Cloudflare R2](https://www.cloudflare.com/learning/cloud/what-is-cloud-storage/) (S3-compatible) for hosting templates and output renders.
+This document provides a deep dive into the architecture, core mechanisms, and security model of the CelitePro Video Editor tool.
 
 ---
 
-## 🏗 Core Mechanisms
+## 🏗 Core Architecture
 
-### 1. Video Rendering Pipeline (The "Dynamic Render Flow")
-Unlike static template systems, CelitePro creates projects on-the-fly to ensure maximum flexibility.
-- **Dynamic Project Creation**: For every render request, the system creates a temporary project in Plainly using a ZIP file hosted on Cloudflare R2.
-- **Manual Parametrization**: The system automatically identifies After Effects compositions and layers (e.g., `img1` in `render` comp) and parametrizes them programmatically.
-- **Logo Scaling Logic**: 
-    - **Mode**: "Fit with fixed aspect ratio".
-    - **Implementation**: Uses `mediaAutoScale` script with `forceFill: false` and `fixedRatio: true` to ensure logos are never cropped or distorted.
-- **Cleanup**: After the render is complete and the file is safely stored in R2, the temporary project is deleted from Plainly to keep the account clean.
+### 1. Dynamic Video Rendering Pipeline
+CelitePro does not use static templates. Instead, it creates projects on-the-fly to ensure every render is clean and isolated.
+- **Project Creation**: For every render request, a temporary project is created in Plainly using the template ZIP from Cloudflare R2.
+- **Parametrization**: Compositions and layers are identified programmatically during the initial analysis phase.
+- **Logo Scaling**: Implements a dedicated scaling script to ensure logos (MEDIA) fit perfectly within their designated layers without distortion.
+- **Cleanup**: Temporary projects and assets are purged post-completion to maintain infrastructure hygiene.
 
-### 2. Storage Strategy (Cloudflare R2)
-- **Templates**: After Effects `.zip` files are stored in the `templates/` directory.
-- **Public Access**: R2 buckets are configured with public access (via custom domains) to allow Plainly's render nodes to download assets.
-- **Persistence**: Rendered videos are moved from Plainly's temporary storage to R2 for long-term user access.
-
-### 3. Database Schema (Supabase)
-- **Templates Table**: Stores metadata about After Effects projects (slugs, descriptions, placeholder definitions).
-- **Render Jobs Table**: Tracks the status of every rendering request (`pending`, `processing`, `completed`, `failed`).
-
-### 4. Image Cropping Mechanism
-- **Workflow**: User uploads logo -> Cropperjs UI opens -> User adjusts clip -> System converts to Base64 -> System uploads to R2 -> System sends R2 URL to Plainly.
-- **Aspect Ratio**: The editor dynamically detects if the template requires a 1:1, 16:9, or custom aspect ratio and locks the cropper accordingly.
+### 2. Project Persistence & State Management
+The system supports full project lifecycle management:
+- **Project Structure**: A project consists of a `template_id` and a `configuration` (JSONB) containing all user-edited images (R2 URLs) and text layers.
+- **Auto-Save Mechanism**: To ensure data integrity, the editor triggers a silent save to the database before initiating the payment/render flow.
+- **Dashboard Synchronization**: The dashboard fetches both active `projects` and past `render_jobs` in parallel, providing a unified view of user activity.
 
 ---
 
-## 🔗 Key API Endpoints
+## 🔐 Security & Data Model (Supabase)
 
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/api/render` | `POST` | Core orchestration: Project creation -> Template setup -> Rendering -> R2 Upload -> Cleanup. |
-| `/api/setup-template` | `POST` | One-time setup for permanent templates (used during development). |
-| `/api/upload-logo` | `POST` | Processes and uploads user-cropped logos to Cloudflare R2. |
-| `/api/list-compositions` | `GET` | Debug tool to inspect After Effects project structures after Plainly analysis. |
+### 1. Row Level Security (RLS)
+Security is enforced at the database level using PostgreSQL RLS policies:
+- **Projects**: `(user_id = auth.uid())` ensures users only see and edit their own creative work.
+- **Admins**: A restricted `admins` table controls access to the administrative dashboard.
+- **Render Jobs**: Tied strictly to the authenticated user's ID.
 
----
-
-## 📂 Project Structure (Key Files)
-
-- `src/lib/plainly.ts`: The "brain" of the integration. Contains all logic for talking to the Plainly API and managing manual templates.
-- `src/lib/cloudflare-r2.ts`: Handles file uploads and public URL generation for S3-compatible storage.
-- `src/app/api/render/route.ts`: Orchestrates the 7-step render-and-cleanup flow.
-- `src/components/LogoReveal.tsx`: The premium UI for the Quick Logo Reveal feature.
-- `src/components/ImageCropper.tsx`: Wrapper for Cropperjs to handle browser-side image processing.
+### 2. Tables & Triggers
+- **`projects`**: Central storage for user edits and template references.
+- **`render_jobs`**: Logs the status (`pending`, `processing`, `completed`, `failed`) and output URLs.
+- **`profiles`**: Automatically populated via a database trigger whenever a new user signs up.
+- **`updated_at` Trigger**: Standard trigger applied across all tables for accurate timestamp tracking.
 
 ---
 
-## 🔐 Environment Variables
+## 🔗 Integration Points
 
-Required variables to make the MVP function:
-- `PLAINLY_API_KEY`: For video rendering.
-- `S3_ENDPOINT`: Cloudflare R2 S3 API URL.
-- `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`: Storage credentials.
-- `PUBLIC_URL_S3`: The public base URL for accessing R2 files.
-- `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_SECRET`: Database connection.
+### Storage (Cloudflare R2)
+- **Base URL**: Managed via `NEXT_PUBLIC_S3_URL` and `PUBLIC_URL_S3` to avoid hardcoding.
+- **Bucket Layout**:
+    - `/logos/`: Branding and UI assets.
+    - `/templates/`: After Effects project ZIPs.
+    - `/renders/`: Final output MP4 files.
+
+### Payments (Razorpay)
+- **Flow**: Order Creation (Server) -> Payment Modal (Client) -> Webhook Confirmation (Server) -> Render Trigger.
+
+### Video Engine (Plainly)
+- **API**: Communicates over REST for project creation, template analysis, and render job status tracking.
 
 ---
 
-*Last Updated: January 18, 2026*
+## 📂 Key Implementation Files
+
+- `src/app/api/render/route.ts`: The main orchestration engine for the render flow.
+- `src/app/api/projects/route.ts`: CRUD operations for project saving.
+- `src/app/templates/[slug]/page.tsx`: Server Component for dynamic SEO/Sharing metadata.
+- `src/components/Header.tsx`: Context-aware navigation with branding integration.
+
+---
+
+*Last Updated: January 19, 2026*
