@@ -70,14 +70,17 @@ class PlainlyClient {
      * Create a project from a ZIP file URL
      */
     async createProject(name: string, zipUrl: string): Promise<PlainlyProject> {
-        // Plainly allows JSON for URL-based project creation
+        const formData = new FormData();
+        formData.append("name", name);
+        formData.append("fileUrl", zipUrl);
+
         const res = await fetch(`${PLAINLY_BASE_URL}/projects`, {
             method: "POST",
-            headers: this.headers,
-            body: JSON.stringify({
-                name,
-                fileUrl: zipUrl,
-            }),
+            headers: {
+                "Authorization": this.authHeader,
+                // Don't set Content-Type for FormData
+            },
+            body: formData,
         });
 
         if (!res.ok) {
