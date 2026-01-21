@@ -43,6 +43,10 @@ export async function GET(request: NextRequest) {
                 outputUrl: job.output_url,
                 thumbnailUrls: job.thumbnail_urls,
                 error: job.error_message,
+                isSample: job.is_sample || false,
+                templateId: job.template_id,
+                projectId: job.project_id,
+                userId: job.user_id,
             });
         }
 
@@ -55,23 +59,34 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // Check Plainly render status only if DB says processing
-        if (!job.plainly_render_id) {
-            return NextResponse.json({
-                status: "processing",
-                message: "Waiting for render to start...",
-            });
-        }
-
         const render = await plainlyClient.getRenderStatus(job.plainly_render_id);
+        console.log(`Status check for job ${renderJobId}: Plainly state=${render.state}, DB status=${job.status}`);
 
         if (render.state === "DONE") {
-            // The background process should handle this, but if the user reaches here
-            // and the DB isn't updated, let's just report the results from Plainly.
-            // We don't perform cleanup here anymore to avoid race conditions with the processor.
+            // Get the output URL (watermark for samples, regular for paid renders)
+            const outputUrl = job.is_sample && render.outputWatermark
+                ? render.outputWatermark
+                : (render.output || job.output_url);
+
+            console.log(`Render DONE - outputWatermark: ${render.outputWatermark}, output: ${render.output}, using: ${outputUrl}`);
+
+            // If the DB hasn't been updated yet, update it now
+            if (job.status !== "completed" && outputUrl) {
+                console.log(`Updating DB status to completed for job ${renderJobId}`);
+                await supabaseAdmin
+                    .from("render_jobs")
+                    .update({
+                        status: "completed",
+                        output_url: outputUrl,
+                        thumbnail_urls: render.thumbnailUris || job.thumbnail_urls,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq("id", renderJobId);
+            }
+
             return NextResponse.json({
                 status: "completed",
-                outputUrl: render.output || job.output_url,
+                outputUrl: outputUrl,
                 thumbnailUrls: render.thumbnailUris || job.thumbnail_urls,
             });
         }
@@ -85,7 +100,7 @@ export async function GET(request: NextRequest) {
 
         // Still processing
         return NextResponse.json({
-            status: job.status,
+            status: "processing",
             plainlyState: render.state,
             thumbnailUrls: job.thumbnail_urls,
         });

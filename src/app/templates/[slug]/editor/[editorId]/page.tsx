@@ -360,6 +360,84 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
     };
 
 
+    const handleFreePreview = async () => {
+        if (!template || !userId) {
+            toast.error("Please log in to render previews");
+            return;
+        }
+
+        // 1. Check if any uploads are still in progress
+        if (uploadingKeys.size > 0) {
+            toast.warning("Please wait for your assets to finish uploading.");
+            return;
+        }
+
+        // 2. Check if all required images are uploaded
+        const missingImages = template.image_placeholders?.filter(p => !images[p.key]);
+        if (missingImages?.length > 0) {
+            toast.warning(`Please upload: ${missingImages.map(p => p.label).join(", ")}`);
+            return;
+        }
+
+        const stillBase64 = template.image_placeholders?.filter(p => images[p.key]?.startsWith("data:"));
+        if (stillBase64?.length > 0) {
+            toast.warning("Some assets are still synchronizing. Please wait a moment.");
+            return;
+        }
+
+        setIsRendering(true);
+
+        try {
+            // Auto-save before preview
+            const savedProjectId = await handleSave(true);
+            if (!savedProjectId) {
+                throw new Error("Failed to auto-save project before previewing");
+            }
+
+            // Prepare parameters
+            const parameters: Record<string, string> = {};
+            for (const [key, url] of Object.entries(images)) {
+                if (url && url.startsWith("http")) {
+                    parameters[key] = url;
+                }
+            }
+            for (const [key, value] of Object.entries(texts)) {
+                if (value) {
+                    parameters[key] = value;
+                }
+            }
+
+            // Call sample render API
+            const res = await fetch("/api/render/sample", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    templateId: template.id,
+                    userId,
+                    parameters,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to start preview render");
+            }
+
+            if (data.renderJobId) {
+                toast.success("Preview started! Redirecting to status page...");
+                router.push(`/render/${data.renderJobId}`);
+            } else {
+                throw new Error("No render job ID returned from preview API");
+            }
+
+        } catch (error) {
+            console.error("Preview error:", error);
+            toast.error(`Preview failed: ${error}`);
+            setIsRendering(false);
+        }
+    };
+
     const handleRender = async () => {
         if (!template || !userId) {
             toast.error("Please log in to render videos");
@@ -701,6 +779,18 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                     >
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {isSaving ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                        onClick={handleFreePreview}
+                        disabled={isRendering || uploadingKeys.size > 0}
+                        className="hidden md:flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shrink-0"
+                    >
+                        {isRendering ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Eye className="w-4 h-4" />
+                        )}
+                        Free Preview
                     </button>
                     <button
                         onClick={handleRender}

@@ -26,6 +26,7 @@ interface PlainlyRender {
     id: string;
     state: string;
     output?: string;
+    outputWatermark?: string;
     thumbnailUris?: string[];
 }
 
@@ -387,9 +388,22 @@ class PlainlyClient {
                 format?: "PNG" | "JPG";
                 fromEncodedVideo?: boolean;
             };
-            outputFormatSettings?: {
+            outputFormat?: {
                 settingsTemplate?: "DRAFT" | "HD";
-                postEncodingType?: string;
+                postEncoding?: {
+                    type: "none" | "scale" | "smallest" | "custom";
+                    scale?: {
+                        scaleBy: "width" | "height";
+                        width?: number;
+                        height?: number;
+                    };
+                    scalingPercentage?: number;
+                    encodingParameters?: string;
+                };
+            };
+            watermark?: {
+                url: string;
+                encodingParameters?: string;
             };
         }
     ): Promise<PlainlyRender> {
@@ -405,15 +419,18 @@ class PlainlyClient {
         requestBody.parameters = parameters;
 
         if (options) {
-            if (options.outputFormatSettings) {
-                requestBody.outputFormatSettings = options.outputFormatSettings;
+            if (options.outputFormat) {
+                requestBody.outputFormat = options.outputFormat;
+            }
+            if (options.watermark) {
+                requestBody.options = requestBody.options || {};
+                requestBody.options.watermark = options.watermark;
             }
             if (options.thumbnails) {
-                requestBody.options = {
-                    thumbnails: {
-                        ...options.thumbnails,
-                        fromEncodedVideo: options.thumbnails.fromEncodedVideo ?? false
-                    }
+                requestBody.options = requestBody.options || {};
+                requestBody.options.thumbnails = {
+                    ...options.thumbnails,
+                    fromEncodedVideo: options.thumbnails.fromEncodedVideo ?? false
                 };
             }
         }

@@ -78,7 +78,7 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
             template.text_placeholders || []
         );
 
-        // Prepare render options
+        // Prepare render options for free preview (low quality 480p)
         let renderOptions: any = {};
         if (isSample) {
             renderOptions = {
@@ -87,9 +87,14 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
                     format: "JPG",
                     fromEncodedVideo: true
                 },
-                outputFormatSettings: {
+                outputFormat: {
+                    // Plainly free preview/low quality parameter: 'DRAFT' settings template
+                    // Combined with 'Scale' post-encoding at 25% for quarter quality
                     settingsTemplate: "DRAFT",
-                    postEncodingType: "None"
+                    postEncoding: {
+                        type: "scale",
+                        scalingPercentage: 25
+                    }
                 }
             };
         }
@@ -99,7 +104,7 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
 
         const plainlyRender = await plainlyClient.startRender(
             plainlyProjectId,
-            isSample ? null : plainlyTemplate.id,
+            plainlyTemplate.id, // Always use template ID to ensure parametrization is applied
             parameters as Record<string, string>,
             renderOptions
         );
@@ -145,17 +150,22 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
         }
 
         // Transfer video output to CDN
-        if (completedRender.output) {
-            console.log("Transferring video output to CDN...");
+        // For sample renders with watermark, use the watermarked output
+        const videoOutputUrl = isSample && completedRender.outputWatermark
+            ? completedRender.outputWatermark
+            : completedRender.output;
+
+        if (videoOutputUrl) {
+            console.log(`Transferring video output to CDN (${isSample ? 'watermarked preview' : 'full render'})...`);
             try {
-                const videoRes = await fetch(completedRender.output);
+                const videoRes = await fetch(videoOutputUrl);
                 const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
                 const path = `renders/${job.user_id}/${Date.now()}.mp4`;
                 const r2Url = await uploadToR2(videoBuffer, path, "video/mp4");
                 updateData.output_url = r2Url;
             } catch (e) {
                 console.error("Failed to transfer video:", e);
-                updateData.output_url = completedRender.output; // Fallback
+                updateData.output_url = videoOutputUrl; // Fallback
             }
         }
 

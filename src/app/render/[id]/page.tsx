@@ -4,9 +4,10 @@ import React, { use, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
     Loader2, CheckCircle, XCircle, Download,
-    ArrowLeft, RefreshCw, Share2, Copy, Check
+    ArrowLeft, RefreshCw, Share2, Copy, Check, Sparkles
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface RenderStatus {
     status: "pending" | "processing" | "completed" | "failed" | "sampling";
@@ -14,6 +15,10 @@ interface RenderStatus {
     error?: string;
     plainlyState?: string;
     message?: string;
+    isSample?: boolean;
+    templateId?: string;
+    projectId?: string;
+    userId?: string;
 }
 
 export default function RenderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,13 +28,15 @@ export default function RenderPage({ params }: { params: Promise<{ id: string }>
     const [status, setStatus] = useState<RenderStatus>({ status: "processing" });
     const [copied, setCopied] = useState(false);
     const [pollCount, setPollCount] = useState(0);
+    const [isUpgrading, setIsUpgrading] = useState(false);
+    const router = useRouter();
 
     useEffect(() => {
         if (status.status === "processing" || status.status === "pending") {
             const interval = setInterval(() => {
                 checkStatus();
                 setPollCount((c) => c + 1);
-            }, 3000);
+            }, 1500); // Poll every 1.5 seconds for faster updates
 
             return () => clearInterval(interval);
         }
@@ -63,6 +70,88 @@ export default function RenderPage({ params }: { params: Promise<{ id: string }>
             navigator.clipboard.writeText(status.outputUrl);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
+    const handleUpgradeToHighQuality = async () => {
+        if (!status.templateId || !status.projectId || !status.userId) {
+            console.error("Missing required data for upgrade");
+            return;
+        }
+
+        setIsUpgrading(true);
+
+        try {
+            // Create payment order
+            const orderRes = await fetch("/api/payment/create-order", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    templateId: status.templateId,
+                    userId: status.userId,
+                    projectId: status.projectId,
+                }),
+            });
+
+            const orderData = await orderRes.json();
+
+            if (!orderRes.ok) {
+                throw new Error(orderData.error || "Failed to create payment order");
+            }
+
+            // Open Razorpay checkout
+            const options = {
+                key: orderData.keyId,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: "CelitePro",
+                description: "High Quality Render",
+                order_id: orderData.orderId,
+                handler: async function (response: any) {
+                    try {
+                        // Verify payment
+                        const verifyRes = await fetch("/api/payment/verify-payment", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                orderId: response.razorpay_order_id,
+                                paymentId: response.razorpay_payment_id,
+                                signature: response.razorpay_signature,
+                            }),
+                        });
+
+                        const verifyData = await verifyRes.json();
+
+                        if (!verifyRes.ok) {
+                            throw new Error(verifyData.error || "Payment verification failed");
+                        }
+
+                        // Navigate to new render job
+                        if (verifyData.renderJobId) {
+                            router.push(`/render/${verifyData.renderJobId}`);
+                        }
+                    } catch (error) {
+                        console.error("Post-payment error:", error);
+                        setIsUpgrading(false);
+                    }
+                },
+                modal: {
+                    ondismiss: function () {
+                        setIsUpgrading(false);
+                    },
+                },
+                theme: {
+                    color: "#4F46E5",
+                },
+            };
+
+            // @ts-ignore - Razorpay is loaded via script
+            const razorpay = new window.Razorpay(options);
+            razorpay.open();
+
+        } catch (error) {
+            console.error("Payment error:", error);
+            setIsUpgrading(false);
         }
     };
 
@@ -158,21 +247,47 @@ export default function RenderPage({ params }: { params: Promise<{ id: string }>
 
                         {/* Actions */}
                         <div className="flex flex-col sm:flex-row gap-4">
-                            <a
-                                href={status.outputUrl}
-                                download
-                                className="flex-1 px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(79,70,229,0.3)] transition-all"
-                            >
-                                <Download className="w-5 h-5" />
-                                Download Video
-                            </a>
-                            <button
-                                onClick={copyToClipboard}
-                                className="px-6 py-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all"
-                            >
-                                {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                                {copied ? "Copied!" : "Copy Link"}
-                            </button>
+                            {status.isSample ? (
+                                <>
+                                    <button
+                                        onClick={handleUpgradeToHighQuality}
+                                        disabled={isUpgrading}
+                                        className="flex-1 px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(79,70,229,0.4)] transition-all disabled:opacity-50"
+                                    >
+                                        {isUpgrading ? (
+                                            <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</>
+                                        ) : (
+                                            <><Sparkles className="w-5 h-5" /> Render in High Quality - ₹199</>
+                                        )}
+                                    </button>
+                                    <a
+                                        href={status.outputUrl}
+                                        download
+                                        className="px-6 py-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all"
+                                    >
+                                        <Download className="w-5 h-5" />
+                                        Download Preview
+                                    </a>
+                                </>
+                            ) : (
+                                <>
+                                    <a
+                                        href={status.outputUrl}
+                                        download
+                                        className="flex-1 px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(79,70,229,0.3)] transition-all"
+                                    >
+                                        <Download className="w-5 h-5" />
+                                        Download Video
+                                    </a>
+                                    <button
+                                        onClick={copyToClipboard}
+                                        className="px-6 py-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all"
+                                    >
+                                        {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                                        {copied ? "Copied!" : "Copy Link"}
+                                    </button>
+                                </>
+                            )}
                         </div>
 
                         <Link
