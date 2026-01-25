@@ -100,6 +100,12 @@ async function handlePaymentSuccess(payment: any) {
             })
             .eq("razorpay_order_id", orderId);
 
+        // Update subscription_orders as well
+        await supabaseAdmin
+            .from("subscription_orders")
+            .update({ status: "completed", updated_at: new Date().toISOString() })
+            .eq("razorpay_order_id", orderId);
+
         if (error) {
             console.error("Failed to update payment:", error);
         } else {
@@ -126,6 +132,12 @@ async function handlePaymentFailure(payment: any) {
                 status: "failed",
                 updated_at: new Date().toISOString(),
             })
+            .eq("razorpay_order_id", orderId);
+
+        // Update subscription_orders as well
+        await supabaseAdmin
+            .from("subscription_orders")
+            .update({ status: "failed", updated_at: new Date().toISOString() })
             .eq("razorpay_order_id", orderId);
 
         if (error) {

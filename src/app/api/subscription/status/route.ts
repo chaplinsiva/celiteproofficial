@@ -49,6 +49,17 @@ export async function GET(request: NextRequest) {
                 storageUsedBytes += size;
             });
 
+            // Fetch free preview count from user_logs
+            const { data: previews } = await supabaseAdmin
+                .from("user_logs")
+                .select("id")
+                .eq("user_id", userId)
+                .eq("action", "free_preview");
+
+            const previewsUsed = previews?.length || 0;
+            const previewLimit = 10;
+            const previewPercent = (previewsUsed / previewLimit) * 100;
+
             const storageUsedGb = storageUsedBytes / (1024 * 1024 * 1024);
             const storageLimitGb = 1; // 1GB for free users
             const storagePercent = (storageUsedGb / storageLimitGb) * 100;
@@ -61,6 +72,9 @@ export async function GET(request: NextRequest) {
                     storageUsedBytes,
                     storageUsedGb: storageUsedGb.toFixed(2),
                     storagePercent: storagePercent.toFixed(1),
+                    previewsUsed,
+                    previewLimit,
+                    previewPercent: previewPercent.toFixed(1),
                 },
                 plan: {
                     name: "Free",
@@ -70,6 +84,8 @@ export async function GET(request: NextRequest) {
                 warnings: {
                     storageNearLimit: storagePercent >= 90,
                     storageAtLimit: storagePercent >= 100,
+                    previewsNearLimit: previewPercent >= 80,
+                    previewsExhausted: previewPercent >= 100,
                 }
             });
         }
@@ -93,6 +109,9 @@ export async function GET(request: NextRequest) {
                 storageUsedBytes: subscription.storage_used_bytes,
                 storageUsedGb: storageUsedGb.toFixed(2),
                 storagePercent: storagePercent.toFixed(1),
+                previewsUsed: null,
+                previewLimit: null,
+                previewPercent: 0,
             },
             plan: {
                 id: plan.id,

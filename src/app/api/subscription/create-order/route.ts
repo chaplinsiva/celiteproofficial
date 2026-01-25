@@ -13,11 +13,11 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { planId, userId } = body;
+        const { planId, userId, fullName, companyName, email, phone } = body;
 
-        if (!planId || !userId) {
+        if (!planId || !userId || !fullName || !email || !phone) {
             return NextResponse.json(
-                { error: "planId and userId are required" },
+                { error: "Plan details and user contact info are required" },
                 { status: 400 }
             );
         }
@@ -31,19 +31,16 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (planError || !plan) {
-            return NextResponse.json(
-                { error: "Invalid subscription plan" },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: "Invalid subscription plan" }, { status: 404 });
         }
 
         // Check for existing active subscription
         const { data: existingSub } = await supabaseAdmin
             .from("user_subscriptions")
-            .select("id, status")
+            .select("id")
             .eq("user_id", userId)
             .eq("status", "active")
-            .single();
+            .maybeSingle();
 
         // Create Razorpay order
         const razorpay = await getRazorpayInstance();
@@ -53,13 +50,35 @@ export async function POST(request: NextRequest) {
             receipt: `sub_${Date.now()}`,
             notes: {
                 planId: plan.id,
-                planName: plan.name,
-                billingCycle: plan.billing_cycle,
                 userId,
+                fullName,
+                companyName: companyName || "",
+                email,
+                phone,
                 isUpgrade: existingSub ? "true" : "false",
                 existingSubId: existingSub?.id || "",
             },
         });
+
+        // Store order in database
+        const { error: dbError } = await supabaseAdmin
+            .from("subscription_orders")
+            .insert({
+                user_id: userId,
+                plan_id: planId,
+                full_name: fullName,
+                company_name: companyName || null,
+                email,
+                phone,
+                status: "initialized",
+                razorpay_order_id: order.id,
+                amount: plan.price_total
+            });
+
+        if (dbError) {
+            console.error("Failed to store subscription order:", dbError);
+            // We continue even if DB logging fails, but we've logged it
+        }
 
         // Get Razorpay Key ID for frontend
         const { data: config } = await supabaseAdmin

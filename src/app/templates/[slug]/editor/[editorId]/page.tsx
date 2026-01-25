@@ -750,6 +750,26 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 </div>
 
                 <div className="flex items-center gap-2 md:gap-3">
+                    {/* Preview Tracker for Free Users */}
+                    {!subscription?.hasSubscription && subscription?.subscription && (
+                        <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl">
+                            <div className="flex flex-col items-end">
+                                <span className="text-[9px] font-bold text-gray-500 uppercase leading-none mb-1">Free Previews</span>
+                                <span className="text-[10px] font-bold text-white leading-none">
+                                    {subscription.subscription.previewsUsed} / {subscription.subscription.previewLimit}
+                                </span>
+                            </div>
+                            <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full transition-all ${Number(subscription.subscription.previewPercent) >= 90 ? 'bg-red-500' :
+                                            Number(subscription.subscription.previewPercent) >= 70 ? 'bg-amber-500' : 'bg-indigo-500'
+                                        }`}
+                                    style={{ width: `${Math.min(Number(subscription.subscription.previewPercent), 100)}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
                     <button
                         onClick={() => handleSave()}
                         disabled={isSaving}
@@ -759,10 +779,23 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         {isSaving ? "Saving..." : "Save"}
                     </button>
                     <button
-                        onClick={handleFreePreview}
+                        onClick={() => {
+                            if (!subscription?.hasSubscription && subscription?.warnings?.previewsExhausted) {
+                                toast.error("Free preview limit reached. Upgrade for unlimited previews!");
+                                router.push("/pricing");
+                                return;
+                            }
+                            handleFreePreview();
+                        }}
                         disabled={isRendering || uploadingKeys.size > 0}
                         className="hidden md:flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shrink-0"
-                        title={!subscription?.hasSubscription ? "Free preview with watermark. Subscribe for HD." : "Preview your edits"}
+                        title={
+                            subscription?.hasSubscription
+                                ? "Preview your edits (Unlimited)"
+                                : subscription?.warnings?.previewsExhausted
+                                    ? "Preview limit reached. Upgrade to continue."
+                                    : `Preview your edits (${subscription?.subscription?.previewsUsed}/${subscription?.subscription?.previewLimit} used)`
+                        }
                     >
                         {isRendering ? (
                             <Loader2 className="w-4 h-4 animate-spin" />

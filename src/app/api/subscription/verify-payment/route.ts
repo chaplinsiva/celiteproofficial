@@ -122,6 +122,12 @@ export async function POST(request: NextRequest) {
             }
         });
 
+        // Update order status in database
+        await supabaseAdmin
+            .from("subscription_orders")
+            .update({ status: "completed", updated_at: now.toISOString() })
+            .eq("razorpay_order_id", orderId);
+
         return NextResponse.json({
             success: true,
             subscription: {

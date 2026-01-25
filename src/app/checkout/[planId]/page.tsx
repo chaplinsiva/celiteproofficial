@@ -24,6 +24,15 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
+
+    // Form State
+    const [formData, setFormData] = useState({
+        fullName: "",
+        companyName: "",
+        email: "",
+        phone: ""
+    });
+
     const router = useRouter();
 
     useEffect(() => {
@@ -42,6 +51,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
             return;
         }
         setUserId(user.id);
+        setFormData(prev => ({
+            ...prev,
+            fullName: user.user_metadata?.full_name || "",
+            email: user.email || ""
+        }));
     };
 
     const fetchPlan = async () => {
@@ -49,7 +63,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
             const res = await fetch("/api/subscription/plans");
             const data = await res.json();
             if (res.ok) {
-                // Find plan in grouped data
                 const allPlans = [...data.grouped.monthly, ...data.grouped.yearly];
                 const foundPlan = allPlans.find(p => p.id === planId);
                 if (foundPlan) {
@@ -67,16 +80,27 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
         }
     };
 
-    const handlePayment = async () => {
+    const handlePayment = async (e: React.FormEvent) => {
+        e.preventDefault();
         if (!userId || !plan) return;
+
+        if (!formData.fullName || !formData.email || !formData.phone) {
+            toast.error("Please fill in all required fields");
+            return;
+        }
+
         setProcessing(true);
 
         try {
-            // Create order
+            // Create order with user details
             const orderRes = await fetch("/api/subscription/create-order", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ planId: plan.id, userId }),
+                body: JSON.stringify({
+                    planId: plan.id,
+                    userId,
+                    ...formData
+                }),
             });
 
             const orderData = await orderRes.json();
@@ -153,15 +177,73 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
                     Back to Plans
                 </Link>
 
-                <div className="grid lg:grid-cols-2 gap-12">
-                    {/* Left: Summary */}
+                <form onSubmit={handlePayment} className="grid lg:grid-cols-2 gap-12">
+                    {/* Left: Summary & Form */}
                     <div className="space-y-8">
                         <div>
                             <h1 className="text-3xl font-bold mb-2">Checkout</h1>
                             <p className="text-gray-400">Review your plan and complete payment securely.</p>
                         </div>
 
+                        {/* Form Section */}
                         <div className="bg-white/[0.03] border border-white/10 rounded-3xl p-8 space-y-6">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <span className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs">1</span>
+                                Contact Details
+                            </h3>
+
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Full Name *</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={formData.fullName}
+                                        onChange={e => setFormData(p => ({ ...p, fullName: e.target.value }))}
+                                        placeholder="John Doe"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Company Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.companyName}
+                                        onChange={e => setFormData(p => ({ ...p, companyName: e.target.value }))}
+                                        placeholder="Acme Inc."
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Email ID *</label>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={formData.email}
+                                        onChange={e => setFormData(p => ({ ...p, email: e.target.value }))}
+                                        placeholder="john@example.com"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Phone Number *</label>
+                                    <input
+                                        type="tel"
+                                        required
+                                        value={formData.phone}
+                                        onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))}
+                                        placeholder="+91 9876543210"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white/[0.03] border border-white/10 rounded-3xl p-8 space-y-6">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <span className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs">2</span>
+                                Plan Summary
+                            </h3>
                             <div className="flex items-center gap-4">
                                 <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 flex items-center justify-center text-indigo-400">
                                     {plan.name === "Basic" ? <Zap /> : plan.name === "Business" ? <Sparkles /> : <Crown />}
@@ -182,14 +264,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
                                 <li className="flex items-center gap-3 text-sm text-gray-300">
                                     <HardDrive className="w-4 h-4 text-blue-400" />
                                     {plan.storage_limit_gb}GB Cloud Storage
-                                </li>
-                                <li className="flex items-center gap-3 text-sm text-gray-300">
-                                    <Check className="w-4 h-4 text-indigo-400" />
-                                    Commercial usage license
-                                </li>
-                                <li className="flex items-center gap-3 text-sm text-gray-300">
-                                    <Check className="w-4 h-4 text-indigo-400" />
-                                    Priority Cloud Processing
                                 </li>
                             </ul>
                         </div>
@@ -223,7 +297,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
                         </div>
 
                         <button
-                            onClick={handlePayment}
+                            type="submit"
                             disabled={processing}
                             className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-[0_0_30px_rgba(79,70,229,0.3)] flex items-center justify-center gap-3 disabled:opacity-50"
                         >
@@ -239,7 +313,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
                             By clicking the button above, you agree to our Terms of Service and Privacy Policy. All payments are securely processed.
                         </p>
                     </div>
-                </div>
+                </form>
             </div>
 
             <script src="https://checkout.razorpay.com/v1/checkout.js" async />

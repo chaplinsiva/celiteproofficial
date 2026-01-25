@@ -54,6 +54,33 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Check subscription and free preview limit
+        const subRes = await supabaseAdmin
+            .from("user_subscriptions")
+            .select("id, status, valid_until")
+            .eq("user_id", userId)
+            .eq("status", "active")
+            .gte("valid_until", new Date().toISOString())
+            .maybeSingle();
+
+        const hasActiveSubscription = !!subRes.data;
+
+        if (!hasActiveSubscription) {
+            // Check preview count for free user
+            const { data: previews } = await supabaseAdmin
+                .from("user_logs")
+                .select("id")
+                .eq("user_id", userId)
+                .eq("action", "free_preview");
+
+            if (previews && previews.length >= 10) {
+                return NextResponse.json(
+                    { error: "Free preview limit reached (10/10). Please subscribe for unlimited previews and HD renders." },
+                    { status: 403 }
+                );
+            }
+        }
+
         // Step 2: Create render job record (Sampling)
         const { data: renderJob, error: jobError } = await supabaseAdmin
             .from("render_jobs")
@@ -80,6 +107,17 @@ export async function POST(request: NextRequest) {
         // Step 3: Start Plainly render process in sample mode (non-blocking)
         processRenderJob(renderJob.id, true).catch((err) => {
             console.error(`Error in background sample render processing for job ${renderJob.id}:`, err);
+        });
+
+        // Log the preview action for limit tracking
+        await supabaseAdmin.from("user_logs").insert({
+            user_id: userId,
+            action: "free_preview",
+            data: {
+                templateId,
+                renderJobId: renderJob.id,
+                isSubscribed: hasActiveSubscription
+            }
         });
 
         return NextResponse.json({
