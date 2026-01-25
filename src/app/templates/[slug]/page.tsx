@@ -4,6 +4,7 @@ import TemplateClient from "./TemplateClient";
 import { Metadata } from "next";
 import Header from "@/components/Header";
 import Link from "next/link";
+import { getTemplateSEO } from "@/lib/seo";
 
 interface Props {
     params: Promise<{ slug: string }>;
@@ -22,27 +23,28 @@ async function getTemplate(slug: string) {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const { slug } = await params;
-    const template = await getTemplate(slug);
+    const seo = await getTemplateSEO(slug);
 
-    if (!template) {
+    if (!seo) {
         return {
             title: "Template Not Found | CelitePro",
         };
     }
 
     return {
-        title: `${template.title} | CelitePro`,
-        description: template.description || `Professional Video Editor tool: Customize ${template.title} and render in minutes.`,
+        title: seo.title,
+        description: seo.description,
+        keywords: seo.keywords,
         openGraph: {
-            title: `${template.title} | CelitePro`,
-            description: template.description || `Customize ${template.title} and render in minutes.`,
-            images: [template.thumbnail_url || `${process.env.PUBLIC_URL_S3}/logos/02.png`],
+            title: seo.title,
+            description: seo.description,
+            images: seo.og_image ? [seo.og_image] : undefined,
         },
         twitter: {
             card: "summary_large_image",
-            title: `${template.title} | CelitePro`,
-            description: template.description || `Customize ${template.title} and render in minutes.`,
-            images: [template.thumbnail_url || `${process.env.PUBLIC_URL_S3}/logos/02.png`],
+            title: seo.title,
+            description: seo.description,
+            images: seo.og_image ? [seo.og_image] : undefined,
         }
     };
 }

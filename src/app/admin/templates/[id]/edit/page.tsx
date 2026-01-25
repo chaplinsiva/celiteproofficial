@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
     ArrowLeft, Upload, Video, Image as ImageIcon, FileArchive,
-    Type, Plus, X, Loader2, Save
+    Type, Plus, X, Loader2, Save, Search
 } from "lucide-react";
 import Link from "next/link";
 
@@ -37,6 +37,9 @@ interface Template {
     source_url: string;
     image_placeholders: ImagePlaceholder[];
     text_placeholders: TextPlaceholder[];
+    meta_title?: string;
+    meta_description?: string;
+    keywords?: string;
 }
 
 export default function EditTemplatePage({ params }: { params: Promise<{ id: string }> }) {
@@ -59,6 +62,10 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
     const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
     const [sourceFile, setSourceFile] = useState<File | null>(null);
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+
+    const [metaTitle, setMetaTitle] = useState("");
+    const [metaDescription, setMetaDescription] = useState("");
+    const [keywords, setKeywords] = useState("");
 
     const [imagePlaceholders, setImagePlaceholders] = useState<ImagePlaceholder[]>([]);
     const [textPlaceholders, setTextPlaceholders] = useState<TextPlaceholder[]>([]);
@@ -89,6 +96,9 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
             setThumbnailPreview(t.thumbnail_url || null);
             setImagePlaceholders(t.image_placeholders || []);
             setTextPlaceholders(t.text_placeholders || []);
+            setMetaTitle(t.meta_title || "");
+            setMetaDescription(t.meta_description || "");
+            setKeywords(t.keywords || "");
         } catch (error) {
             console.error("Error fetching template:", error);
         } finally {
@@ -215,6 +225,9 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
                     source_url: newSourceUrl,
                     image_placeholders: imagePlaceholders,
                     text_placeholders: textPlaceholders,
+                    meta_title: metaTitle,
+                    meta_description: metaDescription,
+                    keywords: keywords,
                 }),
             });
 
@@ -417,6 +430,49 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
                                         <option value="1:1">1:1</option>
                                         <option value="4:3">4:3</option>
                                     </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SEO Settings */}
+                        <div className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl">
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-6 flex items-center gap-2">
+                                <Search className="w-4 h-4 text-orange-400" /> SEO Metadata
+                            </h3>
+
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Meta Title</label>
+                                    <input
+                                        type="text"
+                                        value={metaTitle}
+                                        onChange={(e) => setMetaTitle(e.target.value)}
+                                        placeholder="e.g. Best 4K Logo reveal | CelitePro"
+                                        className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 px-4 text-white focus:ring-1 focus:ring-indigo-500/50 focus:outline-none"
+                                    />
+                                    <p className="text-[10px] text-gray-600 mt-1">Leave empty to use the default title.</p>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Meta Description</label>
+                                    <textarea
+                                        value={metaDescription}
+                                        onChange={(e) => setMetaDescription(e.target.value)}
+                                        rows={2}
+                                        placeholder="Brief summary for search engines..."
+                                        className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 px-4 text-white focus:ring-1 focus:ring-indigo-500/50 focus:outline-none resize-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Keywords</label>
+                                    <input
+                                        type="text"
+                                        value={keywords}
+                                        onChange={(e) => setKeywords(e.target.value)}
+                                        placeholder="logo, reveal, intro, 4k"
+                                        className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 px-4 text-white focus:ring-1 focus:ring-indigo-500/50 focus:outline-none"
+                                    />
                                 </div>
                             </div>
                         </div>

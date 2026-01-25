@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
     Layout, Video, Users, BarChart3,
     ArrowLeft, Clock, CheckCircle2, AlertCircle,
-    RefreshCw, Search, ShieldCheck, ExternalLink, Settings
+    RefreshCw, Search, ShieldCheck, ExternalLink, Settings, Globe
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -251,6 +251,7 @@ export default function AdminDashboard() {
                         <div className="space-y-3">
                             {[
                                 { label: "Manage Templates", icon: Layout, desc: "Edit or add new video templates", href: "/admin/templates" },
+                                { label: "Global SEO", icon: Globe, desc: "Manage site-wide meta tags & indexing", href: "/admin/seo" },
                                 { label: "User Management", icon: Users, desc: "View and manage platform users", href: "/admin/users" },
                                 { label: "Global Settings", icon: Settings, desc: "API keys and platform config", href: "/admin/settings" },
                             ].map((tool, i) => (

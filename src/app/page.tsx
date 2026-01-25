@@ -1,6 +1,23 @@
 import Header from "@/components/Header";
 import Hero from "@/components/Hero";
 import TemplateListing from "@/components/TemplateListing";
+import { Metadata } from "next";
+import { getPageSEO } from "@/lib/seo";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const seo = await getPageSEO('/');
+
+  return {
+    title: seo?.title || "CelitePro | Video Editor tool",
+    description: seo?.description || "Professional Video Editor tool for creators.",
+    keywords: seo?.keywords || "video editor, automation",
+    openGraph: {
+      title: seo?.title,
+      description: seo?.description,
+      images: seo?.og_image ? [seo.og_image] : undefined,
+    }
+  };
+}
 
 export default function Home() {
   return (
