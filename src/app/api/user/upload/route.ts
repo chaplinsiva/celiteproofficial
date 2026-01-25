@@ -18,12 +18,64 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
 
+        // Check storage limits
+        const { data: subscription } = await supabaseAdmin
+            .from("user_subscriptions")
+            .select("*, plan:subscription_plans(*)")
+            .eq("user_id", userId)
+            .eq("status", "active")
+            .single();
+
+        if (subscription) {
+            const plan = subscription.plan as any;
+            const currentUsage = subscription.storage_used_bytes || 0;
+            const limitBytes = (plan.storage_limit_gb || 0) * 1024 * 1024 * 1024;
+
+            if (currentUsage + file.size > limitBytes) {
+                return NextResponse.json({
+                    error: "Storage limit reached",
+                    details: `You have used ${((currentUsage / limitBytes) * 100).toFixed(1)}% of your storage. Please delete files to upload more.`
+                }, { status: 403 });
+            }
+        } else {
+            // Free user limit: 1GB
+            const { data: uploadLogs } = await supabaseAdmin
+                .from("user_logs")
+                .select("data")
+                .eq("user_id", userId)
+                .eq("action", "upload");
+
+            let storageUsedBytes = 0;
+            uploadLogs?.forEach((log: { data: any }) => {
+                storageUsedBytes += (log.data as any)?.fileSize || 0;
+            });
+
+            const limitBytes = 1 * 1024 * 1024 * 1024; // 1GB
+            if (storageUsedBytes + file.size > limitBytes) {
+                return NextResponse.json({
+                    error: "Storage limit reached",
+                    details: `Free tier limit is 1GB. You have used ${((storageUsedBytes / limitBytes) * 100).toFixed(1)}%. Please upgrade for more storage.`
+                }, { status: 403 });
+            }
+        }
+
         // Upload to R2: /uploads/user/{userId}/{timestamp}_{filename}
         const buffer = Buffer.from(await file.arrayBuffer());
         const timestamp = Date.now();
         const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
         const path = `uploads/user/${userId}/${timestamp}_${safeName}`;
         const fileUrl = await uploadToR2(buffer, path, file.type);
+
+        // Update storage used in subscription (if exists)
+        if (subscription) {
+            await supabaseAdmin
+                .from("user_subscriptions")
+                .update({
+                    storage_used_bytes: (subscription.storage_used_bytes || 0) + file.size,
+                    updated_at: new Date().toISOString()
+                })
+                .eq("id", subscription.id);
+        }
 
         // Log the upload in database
         await supabaseAdmin.from("user_logs").insert({

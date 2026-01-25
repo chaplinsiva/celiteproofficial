@@ -6,7 +6,7 @@ import {
     ArrowLeft, Save, Download, Settings,
     Layers, Type, Image as LucideImage,
     Loader2, Sparkles, Upload, X, Crop as CropIcon, Check,
-    ZoomIn, ZoomOut, RotateCcw, Move, RefreshCw, Eye
+    ZoomIn, ZoomOut, RotateCcw, Move, RefreshCw, Eye, Crown
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -108,6 +108,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
     const [isRendering, setIsRendering] = useState(false);
     const [uploadingKeys, setUploadingKeys] = useState<Set<string>>(new Set());
     const [activePlaceholder, setActivePlaceholder] = useState<string | null>(null);
+    const [subscription, setSubscription] = useState<any>(null);
 
     const seekTo = (timestamp?: number) => {
         if (timestamp !== undefined && videoRef.current) {
@@ -125,6 +126,16 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 setUserId(user.id);
+                // Fetch subscription status
+                try {
+                    const res = await fetch(`/api/subscription/status?userId=${user.id}`);
+                    const data = await res.json();
+                    if (res.ok) {
+                        setSubscription(data);
+                    }
+                } catch (err) {
+                    console.error("Failed to fetch subscription status:", err);
+                }
             } else {
                 toast.warning("You are in guest mode. Log in to save your creative progress!", {
                     duration: 5000,
@@ -472,98 +483,65 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 throw new Error("Failed to auto-save project before rendering");
             }
 
-            // Step 1: Create payment order
-            const orderRes = await fetch("/api/payment/create-order", {
+            // Step 1: Check subscription status
+            const subRes = await fetch(`/api/subscription/status?userId=${userId}`);
+            const subData = await subRes.json();
+
+            if (!subData.hasSubscription) {
+                toast.error("No active subscription. Please subscribe to render videos.");
+                router.push("/pricing");
+                setIsRendering(false);
+                return;
+            }
+
+            // Check render limits (null means unlimited)
+            if (subData.plan?.renderLimit && subData.warnings?.rendersExhausted) {
+                toast.error(`Render limit reached (${subData.subscription?.rendersUsed}/${subData.plan.renderLimit}). Wait for renewal or upgrade your plan.`);
+                setIsRendering(false);
+                return;
+            }
+
+            // Step 2: Start render directly (subscription-based)
+            const parameters: Record<string, string> = {};
+            for (const [key, url] of Object.entries(images)) {
+                if (url && url.startsWith("http")) {
+                    parameters[key] = url;
+                }
+            }
+            for (const [key, value] of Object.entries(texts)) {
+                if (value) {
+                    parameters[key] = value;
+                }
+            }
+
+            const renderRes = await fetch("/api/render", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     templateId: template.id,
                     userId,
                     projectId: savedProjectId,
+                    parameters,
                 }),
             });
 
-            const orderData = await orderRes.json();
+            const renderData = await renderRes.json();
 
-            if (!orderRes.ok) {
-                throw new Error(orderData.error || "Failed to create payment order");
+            if (!renderRes.ok) {
+                throw new Error(renderData.error || "Failed to start render");
             }
 
-            // Step 2: Open Razorpay checkout
-            const options = {
-                key: orderData.keyId,
-                amount: orderData.amount,
-                currency: orderData.currency,
-                name: "CelitePro",
-                description: `Render: ${template.title}`,
-                order_id: orderData.orderId,
-                handler: async function (response: any) {
-                    try {
-                        // Step 3: Verify payment
-                        const verifyRes = await fetch("/api/payment/verify-payment", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                orderId: response.razorpay_order_id,
-                                paymentId: response.razorpay_payment_id,
-                                signature: response.razorpay_signature,
-                            }),
-                        });
-
-                        const verifyData = await verifyRes.json();
-
-                        if (!verifyRes.ok) {
-                            throw new Error(verifyData.error || "Payment verification failed");
-                        }
-
-                        // Step 4: Start render after successful payment
-                        const parameters: Record<string, string> = {};
-
-                        // Add image URLs
-                        for (const [key, url] of Object.entries(images)) {
-                            if (url && url.startsWith("http")) {
-                                parameters[key] = url;
-                            }
-                        }
-
-                        // Add text values
-                        for (const [key, value] of Object.entries(texts)) {
-                            if (value) {
-                                parameters[key] = value;
-                            }
-                        }
-
-                        // Step 4: Navigate to render status page (render already started server-side)
-                        if (verifyData.renderJobId) {
-                            router.push(`/render/${verifyData.renderJobId}`);
-                        } else {
-                            // Fallback to dashboard if something went wrong but payment was success
-                            router.push('/dashboard');
-                            toast.success("Payment successful! Your render will start shortly.");
-                        }
-                    } catch (error) {
-                        console.error("Post-payment error:", error);
-                        toast.error(`Error: ${error}`);
-                        setIsRendering(false);
-                    }
-                },
-                modal: {
-                    ondismiss: function () {
-                        setIsRendering(false);
-                    },
-                },
-                theme: {
-                    color: "#4F46E5",
-                },
-            };
-
-            // @ts-ignore - Razorpay is loaded via script
-            const razorpay = new window.Razorpay(options);
-            razorpay.open();
+            if (renderData.renderJobId) {
+                toast.success("Render started!");
+                router.push(`/render/${renderData.renderJobId}`);
+            } else {
+                router.push("/dashboard");
+                toast.success("Render queued successfully!");
+            }
 
         } catch (error) {
-            console.error("Payment error:", error);
-            toast.error(`Payment failed: ${error}`);
+            console.error("Render error:", error);
+            toast.error(`Render failed: ${error}`);
             setIsRendering(false);
         }
     };
@@ -784,6 +762,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         onClick={handleFreePreview}
                         disabled={isRendering || uploadingKeys.size > 0}
                         className="hidden md:flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shrink-0"
+                        title={!subscription?.hasSubscription ? "Free preview with watermark. Subscribe for HD." : "Preview your edits"}
                     >
                         {isRendering ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -793,7 +772,14 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         Free Preview
                     </button>
                     <button
-                        onClick={handleRender}
+                        onClick={() => {
+                            if (subscription?.hasSubscription) {
+                                handleRender();
+                            } else {
+                                toast.info("Subscribe to a plan to start HD renders");
+                                router.push("/pricing");
+                            }
+                        }}
                         disabled={isRendering || uploadingKeys.size > 0}
                         className="flex items-center gap-2 px-4 md:px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs md:text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     >
@@ -804,7 +790,11 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 {uploadingKeys.size > 0 ? (
                                     <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
                                 ) : (
-                                    <><Download className="w-4 h-4" /> Pay ₹199 & Render</>
+                                    subscription?.hasSubscription ? (
+                                        <><Download className="w-4 h-4" /> Render HD</>
+                                    ) : (
+                                        <><Crown className="w-4 h-4" /> Upgrade to Render HD</>
+                                    )
                                 )}
                             </>
                         )}

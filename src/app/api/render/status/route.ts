@@ -113,3 +113,61 @@ export async function GET(request: NextRequest) {
         );
     }
 }
+
+/**
+ * DELETE /api/render/status
+ * Deletes a specific render job and its associated cloud video file.
+ */
+export async function DELETE(request: NextRequest) {
+    checkSupabaseConfig();
+    try {
+        const { searchParams } = new URL(request.url);
+        const jobId = searchParams.get("jobId");
+        const userId = searchParams.get("userId");
+
+        if (!jobId || !userId) {
+            return NextResponse.json(
+                { error: "jobId and userId are required" },
+                { status: 400 }
+            );
+        }
+
+        // 1. Fetch job to get R2 URL
+        const { data: job, error: fetchError } = await supabaseAdmin
+            .from("render_jobs")
+            .select("*")
+            .eq("id", jobId)
+            .eq("user_id", userId)
+            .single();
+
+        if (fetchError || !job) {
+            return NextResponse.json({ error: "Job not found" }, { status: 404 });
+        }
+
+        // 2. Delete from R2 if exists
+        if (job.output_url && job.output_url.includes("r2.cloudflarestorage.com")) {
+            try {
+                const url = new URL(job.output_url);
+                const path = url.pathname.substring(1); // Remove leading slash
+                const { deleteFromR2 } = await import("@/lib/r2");
+                await deleteFromR2(path);
+            } catch (e) {
+                console.error(`Failed to delete R2 video for job ${jobId}:`, e);
+            }
+        }
+
+        // 3. Delete from DB
+        const { error } = await supabaseAdmin
+            .from("render_jobs")
+            .delete()
+            .eq("id", jobId)
+            .eq("user_id", userId);
+
+        if (error) throw error;
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error("Render delete error:", error);
+        return NextResponse.json({ error: "Failed to delete render" }, { status: 500 });
+    }
+}

@@ -137,3 +137,76 @@ async function handlePaymentFailure(payment: any) {
         console.error("Error handling payment failure:", error);
     }
 }
+/**
+ * Handle successful subscription charge (Autopay success)
+ */
+async function handleSubscriptionCharged(rzpSub: any, payment: any) {
+    try {
+        const subId = rzpSub.id;
+
+        // Find existing subscription in our DB
+        const { data: subscription } = await supabaseAdmin
+            .from("user_subscriptions")
+            .select("*, plan:subscription_plans(*)")
+            .eq("razorpay_subscription_id", subId)
+            .eq("status", "active")
+            .single();
+
+        if (!subscription) {
+            console.error(`Subscription ${subId} not found for charging`);
+            return;
+        }
+
+        const plan = subscription.plan as any;
+        const now = new Date();
+        const validUntil = new Date(subscription.valid_until);
+
+        // Extend from current expiry or now, whichever is later
+        const baseDate = validUntil > now ? validUntil : now;
+        const newValidUntil = new Date(baseDate);
+        if (plan.billing_cycle === "yearly") {
+            newValidUntil.setFullYear(newValidUntil.getFullYear() + 1);
+        } else {
+            newValidUntil.setMonth(newValidUntil.getMonth() + 1);
+        }
+
+        // Update subscription: extend validity and reset renders
+        await supabaseAdmin
+            .from("user_subscriptions")
+            .update({
+                valid_until: newValidUntil.toISOString(),
+                renders_used: 0, // Refill renders on autopay
+                autopay_status: "active",
+                razorpay_payment_id: payment?.id || subscription.razorpay_payment_id,
+                updated_at: now.toISOString()
+            })
+            .eq("id", subscription.id);
+
+        console.log(`Subscription ${subscription.id} extended until ${newValidUntil.toISOString()}`);
+    } catch (error) {
+        console.error("Error handling subscription charge:", error);
+    }
+}
+
+/**
+ * Handle subscription cancellation from bank/UPI
+ */
+async function handleSubscriptionCancelled(rzpSub: any) {
+    try {
+        const subId = rzpSub.id;
+
+        // Mark autopay as cancelled by bank, but keep subscription active until expiry
+        await supabaseAdmin
+            .from("user_subscriptions")
+            .update({
+                autopay_status: "cancelled_by_bank",
+                updated_at: new Date().toISOString()
+            })
+            .eq("razorpay_subscription_id", subId)
+            .eq("status", "active");
+
+        console.log(`Autopay for subscription ${subId} marked as cancelled by bank`);
+    } catch (error) {
+        console.error("Error handling subscription cancellation:", error);
+    }
+}

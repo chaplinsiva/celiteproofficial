@@ -54,7 +54,7 @@ const Header = () => {
           <div className="hidden md:flex items-center gap-8">
             <Link href="/" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Home</Link>
             <Link href="/templates" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Templates</Link>
-            <Link href="#" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Pricing</Link>
+            <Link href="/pricing" className="text-sm font-medium text-gray-400 hover:text-white transition-colors">Pricing</Link>
           </div>
 
           <div className="hidden md:flex items-center gap-4">
@@ -150,7 +150,7 @@ const Header = () => {
             <div className="flex flex-col gap-2">
               <Link href="/" className="text-gray-400 hover:text-white text-sm px-4 py-3 hover:bg-white/5 rounded-xl transition-all" onClick={() => setIsOpen(false)}>Home</Link>
               <Link href="/templates" className="text-gray-400 hover:text-white text-sm px-4 py-3 hover:bg-white/5 rounded-xl transition-all" onClick={() => setIsOpen(false)}>Templates</Link>
-              <Link href="#" className="text-gray-400 hover:text-white text-sm px-4 py-3 hover:bg-white/5 rounded-xl transition-all" onClick={() => setIsOpen(false)}>Pricing</Link>
+              <Link href="/pricing" className="text-gray-400 hover:text-white text-sm px-4 py-3 hover:bg-white/5 rounded-xl transition-all" onClick={() => setIsOpen(false)}>Pricing</Link>
 
               {user ? (
                 <div className="mt-2 pt-2 border-t border-white/10 space-y-2">

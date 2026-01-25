@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
                 )
             `)
             .eq("user_id", userId)
+            .eq("is_hidden", false)
             .order("updated_at", { ascending: false });
 
         if (error) throw error;

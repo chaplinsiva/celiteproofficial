@@ -4,13 +4,22 @@ import { checkSupabaseConfig, supabaseAdmin } from "@/lib/supabase-admin";
 export const dynamic = "force-dynamic";
 
 // GET: List all templates
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
         checkSupabaseConfig();
-        const { data, error } = await supabaseAdmin
+        const { searchParams } = new URL(request.url);
+        const showAll = searchParams.get("showAll") === "true";
+
+        let query = supabaseAdmin
             .from("templates")
             .select("*")
             .order("created_at", { ascending: false });
+
+        if (!showAll) {
+            query = query.eq("is_active", true);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 

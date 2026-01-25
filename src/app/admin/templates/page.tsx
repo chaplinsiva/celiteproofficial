@@ -33,7 +33,7 @@ export default function AdminTemplates() {
 
     const fetchTemplates = async () => {
         try {
-            const res = await fetch("/api/admin/templates");
+            const res = await fetch("/api/admin/templates?showAll=true");
             const data = await res.json();
             setTemplates(data.templates || []);
         } catch (error) {

@@ -25,10 +25,10 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { templateId, userId, parameters } = body;
+        const { templateId, userId, parameters, projectId } = body;
 
         console.log("=== RENDER REQUEST START ===");
-        console.log("Request body:", { templateId, userId, parametersCount: Object.keys(parameters || {}).length });
+        console.log("Request body:", { templateId, userId, projectId, parametersCount: Object.keys(parameters || {}).length });
 
         if (!templateId || !userId) {
             return NextResponse.json(
@@ -61,26 +61,54 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log("Step 2: Verifying payment...");
-        const { data: payment, error: paymentError } = await supabaseAdmin
-            .from("payments")
-            .select("*")
+        console.log("Step 2: Checking subscription...");
+
+        // Get active subscription
+        const { data: subscription, error: subError } = await supabaseAdmin
+            .from("user_subscriptions")
+            .select(`
+                *,
+                plan:subscription_plans(*)
+            `)
             .eq("user_id", userId)
-            .eq("template_id", templateId)
-            .eq("status", "paid")
-            .is("render_job_id", null) // Not yet linked to a render job
+            .eq("status", "active")
+            .gte("valid_until", new Date().toISOString())
             .order("created_at", { ascending: false })
             .limit(1)
             .single();
 
-        if (paymentError || !payment) {
-            console.error("Payment verification failed:", paymentError);
+        if (subError || !subscription) {
+            console.error("No active subscription:", subError);
             return NextResponse.json(
-                { error: "Payment required. Please complete payment before rendering." },
-                { status: 402 } // 402 Payment Required
+                { error: "No active subscription. Please subscribe to render videos." },
+                { status: 402 }
             );
         }
-        console.log("Payment verified:", payment.id);
+
+        const plan = subscription.plan as any;
+
+        // Check render limit (null means unlimited)
+        if (plan.render_limit && subscription.renders_used >= plan.render_limit) {
+            return NextResponse.json(
+                { error: `Render limit reached (${subscription.renders_used}/${plan.render_limit}). Wait for renewal or upgrade your plan.` },
+                { status: 403 }
+            );
+        }
+
+        // Increment renders_used
+        const { error: updateError } = await supabaseAdmin
+            .from("user_subscriptions")
+            .update({
+                renders_used: subscription.renders_used + 1,
+                updated_at: new Date().toISOString()
+            })
+            .eq("id", subscription.id);
+
+        if (updateError) {
+            console.error("Failed to update render count:", updateError);
+        }
+
+        console.log(`Subscription verified. Renders used: ${subscription.renders_used + 1}/${plan.render_limit || "unlimited"}`);
 
         // Step 3: Create render job record (Processing immediately)
         console.log("Step 3: Creating render job...");
@@ -89,6 +117,7 @@ export async function POST(request: NextRequest) {
             .insert({
                 user_id: userId,
                 template_id: templateId,
+                project_id: projectId || null,
                 status: "processing",
                 started_at: new Date().toISOString(),
                 parameters,
@@ -105,15 +134,8 @@ export async function POST(request: NextRequest) {
         }
         console.log("Render job created:", renderJob.id);
 
-        // Step 4: Link payment to render job
-        console.log("Step 4: Linking payment...");
-        await supabaseAdmin
-            .from("payments")
-            .update({ render_job_id: renderJob.id })
-            .eq("id", payment.id);
-
-        // Step 5: Start Plainly render process immediately (non-blocking)
-        console.log("Step 5: Starting Plainly render...");
+        // Step 4: Start Plainly render process immediately (non-blocking)
+        console.log("Step 4: Starting Plainly render...");
         processRenderJob(renderJob.id).catch((err) => {
             console.error(`Error in background render processing for job ${renderJob.id}:`, err);
         });
