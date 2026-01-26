@@ -762,7 +762,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                             <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
                                 <div
                                     className={`h-full rounded-full transition-all ${Number(subscription.subscription.previewPercent) >= 90 ? 'bg-red-500' :
-                                            Number(subscription.subscription.previewPercent) >= 70 ? 'bg-amber-500' : 'bg-indigo-500'
+                                        Number(subscription.subscription.previewPercent) >= 70 ? 'bg-amber-500' : 'bg-indigo-500'
                                         }`}
                                     style={{ width: `${Math.min(Number(subscription.subscription.previewPercent), 100)}%` }}
                                 />
@@ -773,7 +773,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                     <button
                         onClick={() => handleSave()}
                         disabled={isSaving}
-                        className="hidden sm:flex items-center gap-2 px-4 py-2 hover:bg-white/5 rounded-lg text-sm transition-colors shrink-0 disabled:opacity-50"
+                        className="hidden xs:flex items-center gap-2 px-3 sm:px-4 py-2 hover:bg-white/5 rounded-lg text-sm transition-colors shrink-0 disabled:opacity-50"
                     >
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {isSaving ? "Saving..." : "Save"}
@@ -788,7 +788,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                             handleFreePreview();
                         }}
                         disabled={isRendering || uploadingKeys.size > 0}
-                        className="hidden md:flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shrink-0"
+                        className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shrink-0"
                         title={
                             subscription?.hasSubscription
                                 ? "Preview your edits (Unlimited)"
@@ -802,7 +802,8 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         ) : (
                             <Eye className="w-4 h-4" />
                         )}
-                        Free Preview
+                        <span className="hidden xs:inline">Free Preview</span>
+                        <span className="xs:hidden">Preview</span>
                     </button>
                     <button
                         onClick={() => {
@@ -814,19 +815,19 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                             }
                         }}
                         disabled={isRendering || uploadingKeys.size > 0}
-                        className="flex items-center gap-2 px-4 md:px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs md:text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                        className="flex items-center gap-2 px-3 sm:px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] xs:text-xs md:text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     >
                         {isRendering ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+                            <><Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> <span className="hidden xs:inline">Processing...</span></>
                         ) : (
                             <>
                                 {uploadingKeys.size > 0 ? (
-                                    <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
+                                    <><Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> <span className="hidden xs:inline">Uploading...</span></>
                                 ) : (
                                     subscription?.hasSubscription ? (
-                                        <><Download className="w-4 h-4" /> Render HD</>
+                                        <><Download className="w-3 h-3 sm:w-4 sm:h-4" /> Render HD</>
                                     ) : (
-                                        <><Crown className="w-4 h-4" /> Upgrade to Render HD</>
+                                        <><Crown className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Upgrade to </span>Render HD</>
                                     )
                                 )}
                             </>
