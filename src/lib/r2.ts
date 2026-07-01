@@ -1,0 +1,77 @@
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+const S3_ENDPOINT = process.env.S3_ENDPOINT!;
+const S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID!;
+const S3_SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY!;
+const PUBLIC_URL_S3 = (process.env.PUBLIC_URL_S3 || process.env.NEXT_PUBLIC_S3_URL || "https://files.celitepro.in").trim();
+
+const r2Client = new S3Client({
+    region: "auto",
+    endpoint: S3_ENDPOINT,
+    credentials: {
+        accessKeyId: S3_ACCESS_KEY_ID,
+        secretAccessKey: S3_SECRET_ACCESS_KEY,
+    },
+});
+
+const BUCKET_NAME = "celitepro";
+
+export async function uploadToR2(
+    file: Buffer,
+    path: string,
+    contentType: string
+): Promise<string> {
+    const command = new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: path,
+        Body: file,
+        ContentType: contentType,
+    });
+
+    await r2Client.send(command);
+
+    // Return public URL
+    return `${PUBLIC_URL_S3}/${path}`;
+}
+
+export async function getPresignedUploadUrl(path: string, contentType: string): Promise<string> {
+    const command = new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: path,
+        ContentType: contentType,
+    });
+    return await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+}
+
+export async function getPresignedDownloadUrl(path: string): Promise<string> {
+    const command = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: path,
+    });
+    return await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+}
+
+export function getR2KeyFromUrl(urlStr: string): string {
+    try {
+        const url = new URL(urlStr);
+        return decodeURIComponent(url.pathname.substring(1));
+    } catch {
+        return urlStr;
+    }
+}
+
+export function getPublicUrl(path: string): string {
+    return `${PUBLIC_URL_S3}/${path}`;
+}
+
+export async function deleteFromR2(path: string): Promise<void> {
+    const command = new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: path,
+    });
+
+    await r2Client.send(command);
+}
+
+export { r2Client, BUCKET_NAME };
