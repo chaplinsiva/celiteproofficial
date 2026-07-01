@@ -21,10 +21,6 @@ import { createClient } from "@supabase/supabase-js";
  *   - Exempt paths: /admin, /login, /signup, /maintenance, /api, /_next, static assets
  */
 
-// Lightweight Supabase client for edge — no auth persistence needed
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
@@ -35,22 +31,24 @@ export async function middleware(request: NextRequest) {
         "/login",
         "/signup",
         "/api/",
+        "/api?",
         "/_next",
         "/favicon",
         "/robots",
         "/sitemap",
     ];
 
-    if (exemptPrefixes.some((p) => pathname.startsWith(p)) || pathname === "/") {
-        // Allow homepage through but check maintenance for it too — except true exempts
-        if (pathname !== "/" || exemptPrefixes.some((p) => pathname.startsWith(p) && pathname !== "/")) {
-            return NextResponse.next();
-        }
+    if (exemptPrefixes.some((p) => pathname.startsWith(p))) {
+        return NextResponse.next();
     }
 
     // ── Check maintenance mode ───────────────────────────────────────────
     try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_SECRET;
+
         if (!supabaseUrl || !supabaseServiceKey) {
+            // No DB credentials — fail open, don't block users
             return NextResponse.next();
         }
 
@@ -58,14 +56,14 @@ export async function middleware(request: NextRequest) {
             auth: { persistSession: false, autoRefreshToken: false },
         });
 
-        const { data: settings } = await supabaseAdmin
+        const { data: settings, error: settingsError } = await supabaseAdmin
             .from("site_settings")
             .select("maintenance_mode")
             .limit(1)
             .maybeSingle();
 
-        if (!settings?.maintenance_mode) {
-            // Maintenance mode is OFF — pass through
+        if (settingsError || !settings?.maintenance_mode) {
+            // Maintenance mode is OFF, or table doesn't exist — pass through
             return NextResponse.next();
         }
 
@@ -96,7 +94,7 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(maintenanceUrl);
 
     } catch (err) {
-        // If the check fails (DB down, etc.), fail open — don't block users
+        // If the check fails (DB down, table missing, etc.), fail open — don't block users
         console.error("[Middleware] Maintenance check failed:", err);
         return NextResponse.next();
     }
@@ -107,17 +105,14 @@ export async function middleware(request: NextRequest) {
  * Supabase stores it in a cookie named `sb-<project-ref>-auth-token`.
  */
 function extractTokenFromCookie(request: NextRequest): string | null {
-    for (const [name, cookie] of request.cookies.getAll().map(c => [c.name, c.value])) {
-        if (name.includes("auth-token") || name.includes("sb-")) {
+    for (const cookie of request.cookies.getAll()) {
+        if (cookie.name.includes("auth-token") || cookie.name.includes("sb-")) {
             try {
-                // Supabase stores JSON in the cookie; the access_token is inside
-                const parsed = JSON.parse(cookie);
+                const parsed = JSON.parse(cookie.value);
                 if (parsed?.access_token) return parsed.access_token;
-                // Sometimes it's a direct token string
                 if (typeof parsed === "string") return parsed;
             } catch {
-                // It might be the raw token
-                if (cookie.startsWith("eyJ")) return cookie;
+                if (cookie.value.startsWith("eyJ")) return cookie.value;
             }
         }
     }
@@ -126,7 +121,7 @@ function extractTokenFromCookie(request: NextRequest): string | null {
 
 export const config = {
     matcher: [
-        // Match all paths that should be checked for maintenance
+        // Match all paths except static assets
         "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|eot)).*)",
     ],
 };
