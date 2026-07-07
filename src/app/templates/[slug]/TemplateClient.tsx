@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+/* eslint-disable @next/next/no-img-element */
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Sparkles, Clock, Layers, Share2, Edit3, ArrowLeft, Image as ImageIcon, Type, User, Check, Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Play, Sparkles, Clock, Layers, Share2, Edit3, ArrowLeft, Image as ImageIcon, Type, User, Check, Mail, Lock, Eye, EyeOff, Loader2, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
@@ -33,7 +34,126 @@ interface Template {
     text_placeholders: TextPlaceholder[];
 }
 
-export default function TemplateClient({ template }: { template: Template }) {
+interface RelatedTemplate {
+    id: string;
+    slug: string;
+    title: string;
+    category: string;
+    duration: string;
+    thumbnail_url: string;
+    preview_url?: string;
+    image_placeholders: { key: string }[];
+    text_placeholders: { key: string }[];
+    credit_cost: number;
+    is_premium?: boolean;
+}
+
+function RelatedTemplateCard({ template, index }: { template: RelatedTemplate; index: number }) {
+    const [isHovered, setIsHovered] = useState(false);
+    const videoRef = useRef<HTMLVideoElement>(null);
+
+    useEffect(() => {
+        if (videoRef.current) {
+            if (isHovered) {
+                videoRef.current.load();
+                videoRef.current.play().catch(() => {});
+            } else {
+                videoRef.current.pause();
+            }
+        }
+    }, [isHovered]);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 25 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.5, delay: index * 0.08 }}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className="group relative bg-white border border-slate-200/80 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-300/80 flex flex-col justify-between h-full w-full"
+        >
+            <div className="relative aspect-[16/10] bg-slate-50 overflow-hidden shrink-0">
+                {template.thumbnail_url ? (
+                    <img
+                        src={template.thumbnail_url}
+                        alt={template.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 to-slate-100 flex items-center justify-center">
+                        <Play className="w-8 h-8 text-slate-300" />
+                    </div>
+                )}
+
+                {/* Hover Video Loop */}
+                {template.preview_url && isHovered && (
+                    <video
+                        ref={videoRef}
+                        src={template.preview_url}
+                        loop
+                        muted
+                        playsInline
+                        className="absolute inset-0 w-full h-full object-cover z-10 transition-opacity duration-300"
+                    />
+                )}
+
+                {/* Status overlays */}
+                <div className="absolute top-3 left-3 right-3 flex justify-between items-center z-20 pointer-events-none">
+                    <span className="px-2 py-0.5 bg-black/60 backdrop-blur-md text-[9px] font-bold text-white rounded border border-white/10 flex items-center gap-1 shadow-sm">
+                        <Sparkles className="w-2.5 h-2.5 text-rose-300" />
+                        {template.credit_cost ?? 20} Credits
+                    </span>
+                    {template.duration && (
+                        <span className="px-2 py-0.5 bg-black/60 backdrop-blur-md text-[9px] font-bold text-white rounded border border-white/10 shadow-sm">
+                            {template.duration}
+                        </span>
+                    )}
+                </div>
+                {template.is_premium && (
+                    <div className="absolute bottom-3 left-3 z-20 pointer-events-none">
+                        <span className="px-2 py-0.5 bg-amber-500/90 backdrop-blur-md text-[9px] font-bold text-white rounded border border-amber-400/30 shadow-sm flex items-center gap-1">
+                            ⭐ Premium
+                        </span>
+                    </div>
+                )}
+
+                <div className="absolute inset-0 bg-black/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+                    <div className="w-10 h-10 rounded-full bg-white/90 shadow-md flex items-center justify-center scale-90 group-hover:scale-100 transition-transform">
+                        <Play className="w-4 h-4 text-slate-800 fill-current ml-0.5" />
+                    </div>
+                </div>
+            </div>
+
+            {/* Info and Customize Link */}
+            <div className="p-5 flex-1 flex flex-col justify-between">
+                <div>
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-100/50 rounded-full text-[9px] font-bold uppercase tracking-wider text-indigo-600">
+                            {template.category}
+                        </span>
+                        <span className="text-[9px] font-semibold text-slate-400">
+                            {template.image_placeholders?.length || 0} Img • {template.text_placeholders?.length || 0} Txt
+                        </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-800 mb-5 group-hover:text-indigo-600 transition-colors line-clamp-1">
+                        {template.title}
+                    </h3>
+                </div>
+
+                <Link
+                    href={`/templates/${template.slug}`}
+                    className="w-full py-3 bg-slate-50 border border-slate-200/80 rounded-xl text-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-all hover:bg-slate-900 hover:border-slate-900 hover:text-white hover:shadow-sm"
+                >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Customize Invitation
+                </Link>
+            </div>
+        </motion.div>
+    );
+}
+
+export default function TemplateClient({ template, relatedTemplates = [] }: { template: Template; relatedTemplates?: RelatedTemplate[] }) {
     const router = useRouter();
     const [showAlert, setShowAlert] = React.useState(false);
     const [copied, setCopied] = React.useState(false);
@@ -435,6 +555,66 @@ export default function TemplateClient({ template }: { template: Template }) {
                     </motion.div>
                 </div>
             </div>
+
+            {/* ── Related Templates Section ─────────────────────────────── */}
+            {relatedTemplates.length > 0 && (
+                <section className="border-t border-slate-100 bg-slate-50/50">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
+                        <div className="flex items-center justify-between mb-10">
+                            <div>
+                                <motion.h2
+                                    initial={{ opacity: 0, y: 10 }}
+                                    whileInView={{ opacity: 1, y: 0 }}
+                                    viewport={{ once: true }}
+                                    className="text-2xl sm:text-3xl font-bold text-slate-900"
+                                >
+                                    You May Also Like
+                                </motion.h2>
+                                <motion.p
+                                    initial={{ opacity: 0, y: 10 }}
+                                    whileInView={{ opacity: 1, y: 0 }}
+                                    viewport={{ once: true }}
+                                    transition={{ delay: 0.1 }}
+                                    className="text-slate-500 mt-2 text-sm sm:text-base"
+                                >
+                                    Explore more {template.category} templates
+                                </motion.p>
+                            </div>
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                whileInView={{ opacity: 1 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: 0.2 }}
+                            >
+                                <Link
+                                    href="/templates"
+                                    className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all group"
+                                >
+                                    View All Templates
+                                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                                </Link>
+                            </motion.div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {relatedTemplates.map((t, i) => (
+                                <RelatedTemplateCard key={t.id} template={t} index={i} />
+                            ))}
+                        </div>
+
+                        {/* Mobile "View All" link */}
+                        <div className="mt-8 text-center sm:hidden">
+                            <Link
+                                href="/templates"
+                                className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all group"
+                            >
+                                View All Templates
+                                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                            </Link>
+                        </div>
+                    </div>
+                </section>
+            )}
         </main>
     );
 }

@@ -141,8 +141,13 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // ── Subscription concurrency guard (only when using subscription) ───
-        if (subscription) {
+        // ── Subscription concurrency guard (only when using subscription AND no entitlement) ───
+        // If user has an active entitlement for this template, prefer it over subscription credits
+        if (entitlement) {
+            // Entitlement takes priority — don't use subscription credits for this render
+            console.log(`Entitlement ${entitlement.id} takes priority over subscription for template ${templateId}. Subscription credits will NOT be deducted.`);
+            subscription = null;
+        } else if (subscription) {
             const plan = subscription.plan as any;
 
             let activeCost = 0;
@@ -244,8 +249,8 @@ export async function POST(request: NextRequest) {
                 status: "processing",
                 started_at: new Date().toISOString(),
                 parameters: cleanedParameters,
-                // Store authorization reference so processor can deduct credits on success
-                subscription_id: subscription?.id || null,
+                // Store ONLY ONE authorization reference — entitlement takes priority
+                subscription_id: entitlement ? null : (subscription?.id || null),
                 entitlement_id: entitlement?.id || null,
             })
             .select()

@@ -20,6 +20,38 @@ async function getTemplate(slug: string) {
     return data;
 }
 
+async function getRelatedTemplates(currentId: string, category: string) {
+    try {
+        // First try same-category templates (excluding current)
+        const { data: sameCat } = await supabaseAdmin
+            .from("templates")
+            .select("id, slug, title, category, duration, thumbnail_url, preview_url, image_placeholders, text_placeholders, credit_cost, is_premium")
+            .eq("is_active", true)
+            .eq("category", category)
+            .neq("id", currentId)
+            .limit(8);
+
+        const results = sameCat || [];
+
+        // If we have fewer than 4, backfill with other active templates
+        if (results.length < 4) {
+            const excludeIds = [currentId, ...results.map((t: any) => t.id)];
+            const { data: others } = await supabaseAdmin
+                .from("templates")
+                .select("id, slug, title, category, duration, thumbnail_url, preview_url, image_placeholders, text_placeholders, credit_cost, is_premium")
+                .eq("is_active", true)
+                .not("id", "in", `(${excludeIds.join(",")})`)
+                .limit(8 - results.length);
+
+            if (others) results.push(...others);
+        }
+
+        return results.slice(0, 8);
+    } catch {
+        return [];
+    }
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const { slug } = await params;
     const seo = await getTemplateSEO(slug);
@@ -66,5 +98,7 @@ export default async function TemplatePage({ params }: Props) {
         );
     }
 
-    return <TemplateClient template={template} />;
+    const relatedTemplates = await getRelatedTemplates(template.id, template.category);
+
+    return <TemplateClient template={template} relatedTemplates={relatedTemplates} />;
 }

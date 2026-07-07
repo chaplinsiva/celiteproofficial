@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
         const plan = subscription.plan as any;
         const storageUsedGb = storageUsedBytes / (1024 * 1024 * 1024);
         const storagePercent = (storageUsedGb / plan.storage_limit_gb) * 100;
-        const rendersRemaining = plan.render_limit ? plan.render_limit - subscription.renders_used : null;
+        const rendersRemaining = plan.render_limit ? Math.max(0, plan.render_limit - subscription.renders_used) : null;
 
         return NextResponse.json({
             hasSubscription: true,
