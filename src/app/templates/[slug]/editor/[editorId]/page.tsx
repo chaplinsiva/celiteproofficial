@@ -589,8 +589,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 const label = placeholder.label?.toLowerCase() || "";
                 const isLogo = label.includes("logo") || label.includes("brand") || label.includes("badge") || label.includes("icon");
                 setBgRemovalMode(isLogo ? "logo" : "people");
-                const canRemove = !subscription?.isFreeUser || (freeBgRemovalsRemaining !== null && freeBgRemovalsRemaining > 0);
-                setShouldRemoveBg(isLogo && canRemove);
+                setShouldRemoveBg(false);
 
                 setShowCropper(true);
                 toast.dismiss(toastId);
@@ -787,8 +786,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 const label = placeholder.label?.toLowerCase() || "";
                 const isLogo = label.includes("logo") || label.includes("brand") || label.includes("badge") || label.includes("icon");
                 setBgRemovalMode(isLogo ? "logo" : "people");
-                const canRemove = !subscription?.isFreeUser || (freeBgRemovalsRemaining !== null && freeBgRemovalsRemaining > 0);
-                setShouldRemoveBg(isLogo && canRemove); // automatically suggest background removal for logos if allowed!
+                setShouldRemoveBg(false); // default to off — user opts in manually
 
                 setShowCropper(true);
             };
