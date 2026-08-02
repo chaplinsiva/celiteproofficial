@@ -267,32 +267,14 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
                 const cost = template.credit_cost || 20;
 
                 if (job.entitlement_id) {
-                    // ── Entitlement-based render: deduct from one-time purchase ──
+                    // ── Legacy entitlement-based render (backward compat for in-progress jobs) ──
                     const { error: entitlementError } = await supabaseAdmin.rpc("decrement_entitlement_credits", {
                         p_entitlement_id: job.entitlement_id,
                         p_cost: cost,
                     });
                     if (entitlementError) {
                         console.error("Entitlement credit deduction RPC failed:", entitlementError);
-                        // Fallback: manual decrement
-                        const { data: ent } = await supabaseAdmin
-                            .from("user_template_entitlements")
-                            .select("credits_remaining")
-                            .eq("id", job.entitlement_id)
-                            .eq("status", "active")
-                            .single();
-                        if (ent && ent.credits_remaining >= cost) {
-                            await supabaseAdmin
-                                .from("user_template_entitlements")
-                                .update({
-                                    credits_remaining: ent.credits_remaining - cost,
-                                    status: (ent.credits_remaining - cost) <= 0 ? "exhausted" : "active",
-                                    updated_at: new Date().toISOString(),
-                                })
-                                .eq("id", job.entitlement_id);
-                        }
                     }
-                    // Mark credits deducted on the job row (prevents double-deduction by stall recovery)
                     await supabaseAdmin
                         .from("render_jobs")
                         .update({ credits_deducted: true })
@@ -353,7 +335,7 @@ export async function processRenderJob(renderJobId: string, isSample: boolean = 
                         .single();
 
                     if (profile) {
-                        const newRemaining = Math.max(0, (profile.free_previews_remaining ?? 10) - 1);
+                        const newRemaining = Math.max(0, (profile.free_previews_remaining ?? 5) - 1);
                         await supabaseAdmin
                             .from("profiles")
                             .update({ free_previews_remaining: newRemaining })

@@ -133,7 +133,7 @@ export async function getOrResetFreePreviews(userId: string) {
         const { data: updatedProfile } = await supabaseAdmin
             .from("profiles")
             .update({
-                free_previews_remaining: 10,
+                free_previews_remaining: 5,
                 free_previews_reset_at: now.toISOString(),
             })
             .eq("id", userId)

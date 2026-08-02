@@ -105,49 +105,7 @@ export async function POST(request: NextRequest) {
 
         const cost = template.credit_cost || 20;
 
-        // ── Case 2: Check for one-time render entitlement ───────────────────
-        const { data: activeEntitlement } = await supabaseAdmin
-            .from("user_template_entitlements")
-            .select("*")
-            .eq("user_id", userId)
-            .eq("template_id", templateId)
-            .eq("status", "active")
-            .order("created_at", { ascending: true })
-            .limit(1)
-            .maybeSingle();
-
-        let entitlement: any = null;
-        let entitlementActiveCost = 0;
-
-        if (activeEntitlement) {
-            // Concurrency guard for entitlement renders
-            const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-            const { data: entitlementActiveJobs } = await supabaseAdmin
-                .from("render_jobs")
-                .select("template_id, templates(credit_cost)")
-                .eq("user_id", userId)
-                .eq("template_id", templateId)
-                .eq("is_sample", false)
-                .in("status", ["pending", "processing", "queued"])
-                .gte("created_at", fifteenMinutesAgo);
-
-            entitlementActiveCost = entitlementActiveJobs?.reduce(
-                (sum: number, j: any) => sum + (j.templates?.credit_cost || 20), 0
-            ) || 0;
-
-            if (activeEntitlement.credits_remaining >= cost + entitlementActiveCost) {
-                entitlement = activeEntitlement;
-                console.log(`Entitlement ${entitlement.id} found for template ${templateId}. Credits: ${entitlement.credits_remaining}, in-flight: ${entitlementActiveCost}, cost: ${cost}.`);
-            }
-        }
-
-        // ── Subscription concurrency guard (only when using subscription AND no entitlement) ───
-        // If user has an active entitlement for this template, prefer it over subscription credits
-        if (entitlement) {
-            // Entitlement takes priority — don't use subscription credits for this render
-            console.log(`Entitlement ${entitlement.id} takes priority over subscription for template ${templateId}. Subscription credits will NOT be deducted.`);
-            subscription = null;
-        } else if (subscription) {
+        if (subscription) {
             const plan = subscription.plan as any;
 
             let activeCost = 0;
@@ -168,33 +126,18 @@ export async function POST(request: NextRequest) {
 
             // Check render limit (for non-expired subs — expired already checked above)
             if (!isExpired && plan.render_limit && (subscription.renders_used + activeCost + cost) > plan.render_limit) {
-                // Subscription exhausted — fall back to entitlement if available
-                if (entitlement) {
-                    console.log(`[route.ts] Subscription exhausted. Falling back to entitlement ${entitlement.id} for template ${templateId}.`);
-                    subscription = null; // Clear subscription to use entitlement path
-                } else {
-                    const available = Math.max(0, plan.render_limit - subscription.renders_used - activeCost);
-                    return NextResponse.json(
-                        { error: `Insufficient credits. This template costs ${cost} credits, but you only have ${available} available (${activeCost > 0 ? `${activeCost} reserved by active renders` : "none in flight"}).` },
-                        { status: 403 }
-                    );
-                }
+                const available = Math.max(0, plan.render_limit - subscription.renders_used - activeCost);
+                return NextResponse.json(
+                    { error: `Insufficient credits. This template costs ${cost} credits, but you only have ${available} available (${activeCost > 0 ? `${activeCost} reserved by active renders` : "none in flight"}).` },
+                    { status: 403 }
+                );
             } else {
                 console.log(`Subscription verified (expired: ${isExpired}). Credits: ${subscription.renders_used}+${activeCost} in-flight/${plan.render_limit || "unlimited"}. Cost: ${cost}. Credit deducted only on success.`);
             }
-        }
-
-        // ── Case 3: Neither subscription nor entitlement ────────────────────
-        if (!subscription && !entitlement) {
-            if (activeEntitlement) {
-                const available = Math.max(0, activeEntitlement.credits_remaining - entitlementActiveCost);
-                return NextResponse.json(
-                    { error: `Insufficient entitlement credits. This template costs ${cost} credits, but you only have ${available} available.` },
-                    { status: 403 }
-                );
-            }
+        } else {
+            // No subscription at all
             return NextResponse.json(
-                { error: "No active subscription or one-time render entitlement. Please subscribe or purchase a one-time render." },
+                { error: "No active subscription. Please subscribe to render HD videos." },
                 { status: 402 }
             );
         }
@@ -249,9 +192,8 @@ export async function POST(request: NextRequest) {
                 status: "processing",
                 started_at: new Date().toISOString(),
                 parameters: cleanedParameters,
-                // Store ONLY ONE authorization reference — entitlement takes priority
-                subscription_id: entitlement ? null : (subscription?.id || null),
-                entitlement_id: entitlement?.id || null,
+                subscription_id: subscription?.id || null,
+                entitlement_id: null,
             })
             .select()
             .single();

@@ -131,7 +131,6 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
     const [freeBgRemovalsRemaining, setFreeBgRemovalsRemaining] = useState<number | null>(null);
     const [showBgMenu, setShowBgMenu] = useState<string | null>(null);
     const [showPurchasePopup, setShowPurchasePopup] = useState(false);
-    const [isPurchasing, setIsPurchasing] = useState(false);
 
     // In-Editor Free Preview State
     const [previewJobId, setPreviewJobId] = useState<string | null>(null);
@@ -1140,34 +1139,24 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
             });
             const subData = await subRes.json();
 
-            // Check if user can render — either active subscription, expired credits, OR one-time entitlement
-            const hasEntitlementForTemplate = subData.templateEntitlements?.some(
-                (e: any) => e.templateId === template.id && e.creditsRemaining > 0
-            );
-            const canRender = subData.hasSubscription || (subData.hasExpiredCredits && subData.expiredCredits) || hasEntitlementForTemplate;
+            // Check if user can render — active subscription or expired credits
+            const canRender = subData.hasSubscription || (subData.hasExpiredCredits && subData.expiredCredits);
             if (!canRender) {
-                toast.error("No active subscription or render entitlement. Please subscribe or purchase a one-time render.");
+                toast.error("No active subscription. Please subscribe to render HD videos.");
                 setIsRendering(false);
                 return;
             }
 
-            // Check render limits — only for active subscriptions
-            // If exhausted AND user has an entitlement for this template, allow rendering via entitlement
+            // Check render limits for active subscriptions
             if (subData.hasSubscription && subData.plan?.renderLimit && subData.warnings?.rendersExhausted) {
-                if (hasEntitlementForTemplate) {
-                    // Fall through — entitlement will be used by render/route.ts (Case 2)
-                    console.log("[handleRender] Subscription exhausted but entitlement exists — continuing via entitlement.");
-                } else {
-                    // Subscription exhausted and no entitlement — show purchase popup instead of dead-end
-                    toast.error(`Render limit reached (${subData.subscription?.rendersUsed}/${subData.plan.renderLimit}). Purchase a one-time render or upgrade your plan.`);
-                    setIsRendering(false);
-                    setShowPurchasePopup(true);
-                    return;
-                }
+                toast.error(`Render limit reached (${subData.subscription?.rendersUsed}/${subData.plan.renderLimit}). Please upgrade your plan for more renders.`);
+                setIsRendering(false);
+                router.push("/pricing");
+                return;
             }
 
             // For expired subscribers: check if they still have credits left
-            if (!subData.hasSubscription && !hasEntitlementForTemplate && subData.hasExpiredCredits && subData.expiredCredits?.remaining === 0) {
+            if (!subData.hasSubscription && subData.hasExpiredCredits && subData.expiredCredits?.remaining === 0) {
                 toast.error("Your expired subscription credits are exhausted. Please renew your plan.");
                 router.push("/pricing");
                 setIsRendering(false);
@@ -1221,116 +1210,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
         }
     };
 
-    // ── One-Time Render Purchase Handler ───────────────────────────────
-    const handleOneTimePurchase = async () => {
-        if (!template || !userId) return;
-        setIsPurchasing(true);
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const token = session?.access_token;
-            if (!token) {
-                toast.error("Please log in to purchase.");
-                router.push("/login");
-                return;
-            }
 
-            // Step 1: Create Razorpay order for one-time purchase
-            const orderRes = await fetch("/api/payment/create-order", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    templateId: template.id,
-                    projectId: projectId || "",
-                    oneTimePurchase: true,
-                }),
-            });
-
-            const orderData = await orderRes.json();
-            if (!orderRes.ok) {
-                throw new Error(orderData.error || "Failed to create order");
-            }
-
-            // Step 2: Open Razorpay checkout
-            const options = {
-                key: orderData.keyId,
-                amount: orderData.amount,
-                currency: orderData.currency,
-                name: "CelitePro",
-                description: `One-Time Render: ${template.title}`,
-                order_id: orderData.orderId,
-                handler: async (response: any) => {
-                    try {
-                        // Step 3: Verify payment and create entitlement
-                        const verifyRes = await fetch("/api/payment/verify-payment", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({
-                                orderId: response.razorpay_order_id,
-                                paymentId: response.razorpay_payment_id,
-                                signature: response.razorpay_signature,
-                            }),
-                        });
-
-                        const verifyData = await verifyRes.json();
-                        if (!verifyRes.ok || !verifyData.success) {
-                            throw new Error(verifyData.error || "Payment verification failed");
-                        }
-
-                        toast.success("One-time render purchased! Starting render...");
-                        setShowPurchasePopup(false);
-
-                        // Step 4: Re-fetch subscription status to pick up new entitlement
-                        const subRes = await fetch("/api/subscription/status", {
-                            headers: { Authorization: `Bearer ${token}` },
-                        });
-                        const subData = await subRes.json();
-                        setSubscription(subData);
-
-                        // Step 5: Auto-trigger render
-                        setShowRenderConfirm(true);
-                    } catch (err: any) {
-                        console.error("Payment verification error:", err);
-                        toast.error(`Payment verification failed: ${err.message}`);
-                    } finally {
-                        setIsPurchasing(false);
-                    }
-                },
-                modal: {
-                    ondismiss: () => {
-                        setIsPurchasing(false);
-                    },
-                },
-                theme: {
-                    color: "#4F46E5",
-                },
-            };
-
-            // Load Razorpay script if not already loaded
-            if (!(window as any).Razorpay) {
-                const script = document.createElement("script");
-                script.src = "https://checkout.razorpay.com/v1/checkout.js";
-                script.async = true;
-                await new Promise<void>((resolve, reject) => {
-                    script.onload = () => resolve();
-                    script.onerror = () => reject(new Error("Failed to load Razorpay"));
-                    document.body.appendChild(script);
-                });
-            }
-
-            const rzp = new (window as any).Razorpay(options);
-            rzp.open();
-        } catch (error: any) {
-            console.error("One-time purchase error:", error);
-            toast.error(`Purchase failed: ${error.message}`);
-            setIsPurchasing(false);
-        }
-    };
 
     if (loading) {
         return (
@@ -1784,7 +1664,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 )}
             </AnimatePresence>
 
-            {/* ── One-Time Purchase Popup ─────────────────────────────────── */}
+            {/* ── Subscribe Popup ─────────────────────────────────── */}
             <AnimatePresence>
                 {showPurchasePopup && (
                     <motion.div
@@ -1792,7 +1672,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
-                        onClick={() => { if (!isPurchasing) setShowPurchasePopup(false); }}
+                        onClick={() => setShowPurchasePopup(false)}
                     >
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -1803,92 +1683,35 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         >
                             <button
                                 onClick={() => setShowPurchasePopup(false)}
-                                disabled={isPurchasing}
-                                className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 transition-colors disabled:opacity-40"
+                                className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
 
                             <div className="flex flex-col items-center text-center mb-6">
-                                {(() => {
-                                    const subExhausted = subscription?.hasSubscription
-                                        && subscription?.plan?.renderLimit
-                                        && subscription?.warnings?.rendersExhausted;
-                                    return subExhausted ? (
-                                        <>
-                                            <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mb-4 border border-amber-100">
-                                                <Crown className="w-8 h-8 text-amber-500" />
-                                            </div>
-                                            <h3 className="text-2xl font-bold text-slate-900 mb-2">Render Quota Full</h3>
-                                            <div className="w-full px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl mb-2">
-                                                <p className="text-amber-700 text-xs font-semibold">
-                                                    Your plan has used {subscription?.subscription?.rendersUsed}/{subscription?.plan?.renderLimit} renders this cycle.
-                                                </p>
-                                            </div>
-                                            <p className="text-slate-500 text-sm">
-                                                Buy a one-time render for <strong className="text-slate-900">{template?.title}</strong>, or upgrade your plan for more renders.
-                                            </p>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-4 border border-indigo-100">
-                                                <Download className="w-8 h-8 text-indigo-500" />
-                                            </div>
-                                            <h3 className="text-2xl font-bold text-slate-900 mb-2">Render HD Video</h3>
-                                            <p className="text-slate-500 text-sm">
-                                                Choose how you'd like to unlock HD rendering for <strong className="text-slate-900">{template?.title}</strong>.
-                                            </p>
-                                        </>
-                                    );
-                                })()}
+                                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-4 border border-indigo-100">
+                                    <Crown className="w-8 h-8 text-amber-500" />
+                                </div>
+                                <h3 className="text-2xl font-bold text-slate-900 mb-2">Subscribe to Render</h3>
+                                <p className="text-slate-500 text-sm">
+                                    Subscribe to unlock HD rendering for <strong className="text-slate-900">{template?.title}</strong> and all other templates.
+                                </p>
                             </div>
 
                             <div className="flex flex-col gap-3">
-                                {/* One-Time Purchase option — hidden for premium templates */}
-                                {!(template as any)?.is_premium && (
-                                    <button
-                                        onClick={handleOneTimePurchase}
-                                        disabled={isPurchasing}
-                                        className="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl shadow-[0_0_20px_rgba(79,70,229,0.3)] transition-all flex items-center justify-between gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            {isPurchasing ? (
-                                                <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                            ) : (
-                                                <Download className="w-5 h-5 shrink-0" />
-                                            )}
-                                            <div className="text-left">
-                                                <div className="text-sm font-bold">One-Time Render</div>
-                                                <div className="text-xs font-normal text-indigo-200">Pay once, render this template</div>
-                                            </div>
-                                        </div>
-                                        <span className="text-lg font-black shrink-0">
-                                            ₹{Math.round(((template as any)?.one_time_price ?? 10000) / 100)}
-                                        </span>
-                                    </button>
-                                )}
-
-                                {/* Subscribe option */}
                                 <button
                                     onClick={() => { setShowPurchasePopup(false); router.push("/pricing"); }}
-                                    disabled={isPurchasing}
-                                    className="w-full px-6 py-4 bg-white border-2 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-slate-800 font-bold rounded-2xl transition-all flex items-center justify-between gap-3 disabled:opacity-50"
+                                    className="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl shadow-[0_0_20px_rgba(79,70,229,0.3)] transition-all flex items-center justify-between gap-3"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <Crown className="w-5 h-5 text-amber-500 shrink-0" />
+                                        <Crown className="w-5 h-5 shrink-0" />
                                         <div className="text-left">
                                             <div className="text-sm font-bold">Subscribe</div>
-                                            <div className="text-xs font-normal text-slate-500">Unlimited renders across all templates</div>
+                                            <div className="text-xs font-normal text-indigo-200">Unlimited renders across all templates</div>
                                         </div>
                                     </div>
-                                    <span className="text-xs font-bold text-indigo-600 shrink-0">View Plans →</span>
+                                    <span className="text-xs font-bold text-white/80 shrink-0">View Plans →</span>
                                 </button>
-
-                                {(template as any)?.is_premium && (
-                                    <p className="text-center text-xs text-amber-600 font-medium mt-1">
-                                        ⭐ This is a <strong>Premium template</strong>. Subscription required.
-                                    </p>
-                                )}
                             </div>
                         </motion.div>
                     </motion.div>
@@ -1975,11 +1798,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                     </button>
                     <button
                         onClick={() => {
-                            const hasEntitlementForTemplate = subscription?.templateEntitlements?.some(
-                                (e: any) => e.templateId === template?.id && e.creditsRemaining > 0
-                            );
-
-                            // Subscription exhausted? Treat as "no valid render right" unless they have an entitlement
+                            // Subscription exhausted? Treat as "no valid render right"
                             const subExhausted = subscription?.hasSubscription
                                 && subscription?.plan?.renderLimit
                                 && subscription?.warnings?.rendersExhausted;
@@ -1990,12 +1809,12 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 subscription?.hasExpiredCredits && subscription?.expiredCredits
                                 && subscription?.expiredCredits?.remaining > 0;
 
-                            const canRender = canRenderViaSubscription || canRenderViaExpiredCredits || hasEntitlementForTemplate;
+                            const canRender = canRenderViaSubscription || canRenderViaExpiredCredits;
 
                             if (canRender) {
                                 setShowRenderConfirm(true);
                             } else {
-                                // Subscribed but quota exhausted — offer one-time purchase
+                                // No valid subscription — prompt to subscribe
                                 setShowPurchasePopup(true);
                             }
                         }}
@@ -2010,15 +1829,11 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                     <><Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> <span className="hidden xs:inline">Uploading...</span></>
                                 ) : (
                                     (() => {
-                                        const hasEnt = subscription?.templateEntitlements?.some(
-                                            (e: any) => e.templateId === template?.id && e.creditsRemaining > 0
-                                        );
                                         const subExhausted = subscription?.hasSubscription
                                             && subscription?.plan?.renderLimit
                                             && subscription?.warnings?.rendersExhausted;
                                         const canRenderNormally = (subscription?.hasSubscription && !subExhausted)
-                                            || subscription?.hasExpiredCredits
-                                            || hasEnt;
+                                            || subscription?.hasExpiredCredits;
                                         return canRenderNormally
                                             ? <><Download className="w-3 h-3 sm:w-4 sm:h-4" /> Render HD</>
                                             : <><Crown className="w-3 h-3 sm:w-4 sm:h-4" /> {subExhausted ? "Quota Full" : "Render HD"}</>;

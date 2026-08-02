@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         if (!hasActiveSubscription) {
             // Get or reset free previews dynamically from profiles
             const profile = await getOrResetFreePreviews(userId);
-            const remainingPreviews = profile?.free_previews_remaining ?? 10;
+            const remainingPreviews = profile?.free_previews_remaining ?? 5;
 
             const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
