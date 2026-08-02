@@ -86,9 +86,9 @@ export async function GET(request: NextRequest) {
         if (error || !subscription) {
             // Get or reset free previews dynamically from profiles
             const profile = await getOrResetFreePreviews(userId);
-            const remaining = profile?.free_previews_remaining ?? 5;
-            const previewsUsed = Math.max(0, 5 - remaining);
-            const previewLimit = 5;
+            const remaining = profile?.free_previews_remaining ?? 3;
+            const previewsUsed = Math.max(0, 3 - remaining);
+            const previewLimit = 3;
             const previewPercent = (previewsUsed / previewLimit) * 100;
             const storageUsedGb = storageUsedBytes / (1024 * 1024 * 1024);
             const storageLimitGb = 1;
