@@ -32,7 +32,7 @@ export async function GET(request: Request) {
                     user_id, template_id
                 `)
                 .order("created_at", { ascending: false })
-                .limit(100),
+                .limit(1000),
             supabaseAdmin
                 .from("render_jobs")
                 .select("*", { count: "exact", head: true }),

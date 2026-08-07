@@ -9,7 +9,8 @@ import { supabase } from "@/lib/supabase";
 import {
     Layout, Video, Users, BarChart3, ArrowLeft, Clock, CheckCircle2, AlertCircle,
     RefreshCw, ShieldCheck, ExternalLink, Settings, Globe, Play, X,
-    CreditCard, Crown, Calendar, Zap, Download, Eye, XCircle, TrendingUp
+    CreditCard, Crown, Calendar, Zap, Download, Eye, XCircle, TrendingUp, ChevronDown,
+    ChevronLeft, ChevronRight
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -81,6 +82,10 @@ export default function AdminDashboard() {
     const [playingVideo, setPlayingVideo] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<"renders" | "subscriptions" | "oneTime">("renders");
     const [statusFilter, setStatusFilter] = useState<string>("all");
+    const [hdPage, setHdPage] = useState<number>(1);
+    const [hdShowAll, setHdShowAll] = useState<boolean>(false);
+    const [freePage, setFreePage] = useState<number>(1);
+    const [freeShowAll, setFreeShowAll] = useState<boolean>(false);
     const [graphMetric, setGraphMetric] = useState<"earnings" | "count">("earnings");
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const router = useRouter();
@@ -317,62 +322,212 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Renders Tab */}
-                {activeTab === "renders" && (
-                    <div>
-                        <div className="flex items-center gap-2 mb-6 flex-wrap">
-                            {["all", "completed", "processing", "pending", "failed", "sampling"].map(f => (
-                                <button key={f} onClick={() => setStatusFilter(f)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all border ${statusFilter === f ? "bg-indigo-500/20 border-indigo-500/40 text-indigo-300" : "bg-white/[0.02] border-white/5 text-gray-500 hover:text-gray-300"}`}>
-                                    {f} {f !== "all" && `(${data.renders.filter(r => r.status === f).length})`}
+                {activeTab === "renders" && (() => {
+                    const ITEMS_PER_PAGE = 12;
+                    const allHdRenders = filteredRenders.filter(r => !r.is_sample);
+                    const totalHdPages = Math.ceil(allHdRenders.length / ITEMS_PER_PAGE) || 1;
+                    const currentHdPage = Math.min(hdPage, totalHdPages);
+                    const visibleHdRenders = hdShowAll
+                        ? allHdRenders
+                        : allHdRenders.slice((currentHdPage - 1) * ITEMS_PER_PAGE, currentHdPage * ITEMS_PER_PAGE);
+
+                    const allFreeRenders = filteredRenders.filter(r => r.is_sample);
+                    const totalFreePages = Math.ceil(allFreeRenders.length / ITEMS_PER_PAGE) || 1;
+                    const currentFreePage = Math.min(freePage, totalFreePages);
+                    const visibleFreeRenders = freeShowAll
+                        ? allFreeRenders
+                        : allFreeRenders.slice((currentFreePage - 1) * ITEMS_PER_PAGE, currentFreePage * ITEMS_PER_PAGE);
+
+                    const resetPagination = () => {
+                        setHdPage(1);
+                        setHdShowAll(false);
+                        setFreePage(1);
+                        setFreeShowAll(false);
+                    };
+
+                    const renderPaginationBar = (
+                        page: number,
+                        totalPages: number,
+                        totalItems: number,
+                        showAll: boolean,
+                        setPage: (p: number) => void,
+                        setShowAll: (sa: boolean | ((prev: boolean) => boolean)) => void,
+                        accent: "amber" | "indigo"
+                    ) => {
+                        if (totalItems <= ITEMS_PER_PAGE && !showAll) return null;
+                        const isAmber = accent === "amber";
+
+                        // Page numbers calculation
+                        const pages: (number | "...")[] = [];
+                        if (totalPages <= 7) {
+                            for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                            pages.push(1);
+                            if (page > 3) pages.push("...");
+                            const start = Math.max(2, page - 1);
+                            const end = Math.min(totalPages - 1, page + 1);
+                            for (let i = start; i <= end; i++) pages.push(i);
+                            if (page < totalPages - 2) pages.push("...");
+                            pages.push(totalPages);
+                        }
+
+                        return (
+                            <div className="mt-6 flex flex-wrap items-center justify-between gap-4 bg-white/[0.01] border border-white/5 p-3 rounded-2xl">
+                                <button
+                                    onClick={() => setShowAll(prev => !prev)}
+                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                                        showAll
+                                            ? (isAmber ? "bg-amber-500/20 text-amber-300 border-amber-500/30" : "bg-indigo-500/20 text-indigo-300 border-indigo-500/30")
+                                            : "bg-white/5 text-gray-400 border-white/10 hover:text-white"
+                                    }`}
+                                >
+                                    {showAll ? "Paginate (12 per page)" : `Show All (${totalItems})`}
                                 </button>
-                            ))}
-                        </div>
 
-                        {/* HD Renders Section (Priority / First) */}
-                        <div className="mb-10">
-                            <div className="flex items-center gap-2 mb-4 bg-gradient-to-r from-amber-500/10 to-transparent p-2 rounded-lg border-l-2 border-amber-500 w-fit pr-6">
-                                <Crown className="w-4 h-4 text-amber-400" />
-                                <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-                                    HD Renders ({filteredRenders.filter(r => !r.is_sample).length})
-                                </h2>
+                                {!showAll && totalPages > 1 && (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <button
+                                            disabled={page === 1}
+                                            onClick={() => setPage(page - 1)}
+                                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                            title="Previous Page"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" />
+                                        </button>
+
+                                        {pages.map((p, idx) => (
+                                            typeof p === "number" ? (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => setPage(p)}
+                                                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${
+                                                        page === p
+                                                            ? (isAmber ? "bg-amber-500 text-black font-extrabold" : "bg-indigo-500 text-white font-extrabold")
+                                                            : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                                                    }`}
+                                                >
+                                                    {p}
+                                                </button>
+                                            ) : (
+                                                <span key={idx} className="px-1 text-gray-600 text-xs">...</span>
+                                            )
+                                        ))}
+
+                                        <button
+                                            disabled={page === totalPages}
+                                            onClick={() => setPage(page + 1)}
+                                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                            title="Next Page"
+                                        >
+                                            <ChevronRight className="w-4 h-4" />
+                                        </button>
+
+                                        <span className="ml-2 text-xs text-gray-500 font-medium">
+                                            Page {page} of {totalPages}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
-                            {filteredRenders.filter(r => !r.is_sample).length === 0 ? (
-                                <div className="text-center py-12 bg-white/[0.01] border border-white/5 rounded-2xl text-gray-600">
-                                    <Video className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                                    <p className="text-xs">No HD renders found.</p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                    {filteredRenders.filter(r => !r.is_sample).map(renderCard)}
-                                </div>
-                            )}
-                        </div>
+                        );
+                    };
 
-                        {/* Free Renders Section */}
+                    return (
                         <div>
-                            <div className="flex items-center gap-2 mb-4 bg-gradient-to-r from-indigo-500/10 to-transparent p-2 rounded-lg border-l-2 border-indigo-500/50 w-fit pr-6">
-                                <Video className="w-4 h-4 text-indigo-400" />
-                                <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-                                    Free Preview Renders ({filteredRenders.filter(r => r.is_sample).length})
-                                </h2>
+                            <div className="flex items-center gap-2 mb-6 flex-wrap">
+                                {["all", "completed", "processing", "pending", "failed", "sampling"].map(f => (
+                                    <button key={f} onClick={() => { setStatusFilter(f); resetPagination(); }}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all border ${statusFilter === f ? "bg-indigo-500/20 border-indigo-500/40 text-indigo-300" : "bg-white/[0.02] border-white/5 text-gray-500 hover:text-gray-300"}`}>
+                                        {f} {f !== "all" && `(${data.renders.filter(r => r.status === f).length})`}
+                                    </button>
+                                ))}
                             </div>
-                            {filteredRenders.filter(r => r.is_sample).length === 0 ? (
-                                <div className="text-center py-12 bg-white/[0.01] border border-white/5 rounded-2xl text-gray-600">
-                                    <Video className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                                    <p className="text-xs">No free preview renders found.</p>
+
+                            {/* HD Renders Section (Priority / First) */}
+                            <div className="mb-10">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2 bg-gradient-to-r from-amber-500/10 to-transparent p-2 rounded-lg border-l-2 border-amber-500 w-fit pr-6">
+                                        <Crown className="w-4 h-4 text-amber-400" />
+                                        <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+                                            HD Renders ({allHdRenders.length})
+                                        </h2>
+                                    </div>
+                                    {allHdRenders.length > 0 && (
+                                        <span className="text-[11px] font-medium text-gray-500">
+                                            {hdShowAll
+                                                ? `Showing all ${allHdRenders.length} HD renders`
+                                                : `Showing page ${currentHdPage} of ${totalHdPages} (${visibleHdRenders.length} items)`}
+                                        </span>
+                                    )}
                                 </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                    {filteredRenders.filter(r => r.is_sample).map(renderCard)}
+                                {allHdRenders.length === 0 ? (
+                                    <div className="text-center py-12 bg-white/[0.01] border border-white/5 rounded-2xl text-gray-600">
+                                        <Video className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                                        <p className="text-xs">No HD renders found.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                            {visibleHdRenders.map(renderCard)}
+                                        </div>
+                                        {renderPaginationBar(
+                                            currentHdPage,
+                                            totalHdPages,
+                                            allHdRenders.length,
+                                            hdShowAll,
+                                            setHdPage,
+                                            setHdShowAll,
+                                            "amber"
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Free Renders Section */}
+                            <div>
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-500/10 to-transparent p-2 rounded-lg border-l-2 border-indigo-500/50 w-fit pr-6">
+                                        <Video className="w-4 h-4 text-indigo-400" />
+                                        <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+                                            Free Preview Renders ({allFreeRenders.length})
+                                        </h2>
+                                    </div>
+                                    {allFreeRenders.length > 0 && (
+                                        <span className="text-[11px] font-medium text-gray-500">
+                                            {freeShowAll
+                                                ? `Showing all ${allFreeRenders.length} free renders`
+                                                : `Showing page ${currentFreePage} of ${totalFreePages} (${visibleFreeRenders.length} items)`}
+                                        </span>
+                                    )}
                                 </div>
+                                {allFreeRenders.length === 0 ? (
+                                    <div className="text-center py-12 bg-white/[0.01] border border-white/5 rounded-2xl text-gray-600">
+                                        <Video className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                                        <p className="text-xs">No free preview renders found.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                            {visibleFreeRenders.map(renderCard)}
+                                        </div>
+                                        {renderPaginationBar(
+                                            currentFreePage,
+                                            totalFreePages,
+                                            allFreeRenders.length,
+                                            freeShowAll,
+                                            setFreePage,
+                                            setFreeShowAll,
+                                            "indigo"
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {filteredRenders.length === 0 && (
+                                <div className="text-center py-20 text-gray-600"><Video className="w-12 h-12 mx-auto mb-3 opacity-30" /><p className="text-sm">No renders found for this filter.</p></div>
                             )}
                         </div>
-
-                        {filteredRenders.length === 0 && (
-                            <div className="text-center py-20 text-gray-600"><Video className="w-12 h-12 mx-auto mb-3 opacity-30" /><p className="text-sm">No renders found for this filter.</p></div>
-                        )}
-                    </div>
-                )}
+                    );
+                })()}
 
                 {/* Subscriptions Tab */}
                 {activeTab === "subscriptions" && (
