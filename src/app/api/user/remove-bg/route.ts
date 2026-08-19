@@ -95,9 +95,30 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // 2. Call API4AI background removal endpoint
-        const apiKey = process.env.BG_REMOVER_API;
-        const baseUrl = (process.env.BG_REMOVER_URL || "https://api4ai.cloud/img-bg-removal/v1").trim().replace(/\/$/, "");
+        // 2. Resolve API4AI credentials & endpoint safely
+        let apiKey = process.env.BG_REMOVER_API?.trim() || "";
+        let rawUrl = process.env.BG_REMOVER_URL?.trim() || "";
+
+        // If BG_REMOVER_API was set to a URL and BG_REMOVER_URL to an API key, auto-swap them
+        if (apiKey.startsWith("http://") || apiKey.startsWith("https://")) {
+            const temp = apiKey;
+            apiKey = rawUrl;
+            rawUrl = temp;
+        }
+
+        // If rawUrl is actually an API key (e.g. starts with 'a4a-' or is a key without protocol)
+        if (rawUrl) {
+            if (rawUrl.startsWith("a4a-") || (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://") && !rawUrl.includes("."))) {
+                if (!apiKey) {
+                    apiKey = rawUrl;
+                }
+                rawUrl = "https://api4ai.cloud/img-bg-removal/v1";
+            } else if (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
+                rawUrl = `https://${rawUrl}`;
+            }
+        }
+
+        const baseUrl = (rawUrl || "https://api4ai.cloud/img-bg-removal/v1").replace(/\/$/, "");
         
         if (!apiKey) {
             console.error("BG_REMOVER_API environment variable is not defined");
