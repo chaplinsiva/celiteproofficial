@@ -894,9 +894,17 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                     }),
                                 });
 
-                                const removeData = await removeRes.json();
+                                let removeData: any = null;
+                                const contentType = removeRes.headers.get("content-type") || "";
+                                if (contentType.includes("application/json")) {
+                                    removeData = await removeRes.json();
+                                } else {
+                                    const text = await removeRes.text().catch(() => "");
+                                    throw new Error(text || `Background removal failed (${removeRes.status})`);
+                                }
+
                                 if (!removeRes.ok) {
-                                    throw new Error(removeData.error || "Failed to remove background");
+                                    throw new Error(removeData?.error || "Failed to remove background");
                                 }
 
                                 setImages(prev => ({
@@ -981,9 +989,17 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 }),
             });
 
-            const data = await res.json();
+            let data: any = null;
+            const contentType = res.headers.get("content-type") || "";
+            if (contentType.includes("application/json")) {
+                data = await res.json();
+            } else {
+                const text = await res.text().catch(() => "");
+                throw new Error(text || `Background removal failed (${res.status})`);
+            }
+
             if (!res.ok) {
-                throw new Error(data.error || "Failed to remove background");
+                throw new Error(data?.error || "Failed to remove background");
             }
 
             setImages(prev => ({

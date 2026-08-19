@@ -4,6 +4,7 @@ import { uploadToR2, getPresignedDownloadUrl, getR2KeyFromUrl, r2Client, BUCKET_
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Allow sufficient time for AI processing
 
 export async function POST(request: NextRequest) {
     try {
@@ -122,36 +123,53 @@ export async function POST(request: NextRequest) {
         
         if (!apiKey) {
             console.error("BG_REMOVER_API environment variable is not defined");
-            return NextResponse.json({ error: "Background removal service is not configured (missing API key)" }, { status: 500 });
+            return NextResponse.json({ error: "Background removal service is not configured (missing API key)" }, { status: 400 });
         }
         
         const isPeople = mode === "people";
-        const api4aiUrl = isPeople ? `${baseUrl}/people/results` : `${baseUrl}/results`;
+        const primaryUrl = isPeople 
+            ? `${baseUrl}/people/results?api_key=${encodeURIComponent(apiKey)}` 
+            : `${baseUrl}/results?api_key=${encodeURIComponent(apiKey)}`;
 
-        const formData = new FormData();
+        const createFormData = async () => {
+            const fd = new FormData();
+            if (imageBuffer) {
+                fd.append("image", new Blob([new Uint8Array(imageBuffer)], { type: "image/png" }), "input_image.png");
+            } else {
+                const s3Key = getR2KeyFromUrl(imageUrl);
+                const presignedInputUrl = await getPresignedDownloadUrl(s3Key);
+                fd.append("url", presignedInputUrl);
+            }
+            return fd;
+        };
 
-        if (imageBuffer) {
-            formData.append("image", new Blob([new Uint8Array(imageBuffer)], { type: "image/png" }), "input_image.png");
-        } else {
-            // Fallback to sending presigned URL if buffer couldn't be loaded
-            const s3Key = getR2KeyFromUrl(imageUrl);
-            const presignedInputUrl = await getPresignedDownloadUrl(s3Key);
-            formData.append("url", presignedInputUrl);
-        }
+        const headers = {
+            "X-API-KEY": apiKey,
+            "X-RapidAPI-Key": apiKey,
+        };
 
-        console.log(`Sending image to API4AI (${mode || "general"})... Endpoint: ${api4aiUrl}`);
-        const apiResponse = await fetch(api4aiUrl, {
+        console.log(`Sending image to API4AI (${mode || "general"})... Base: ${baseUrl}`);
+        let apiResponse = await fetch(primaryUrl, {
             method: "POST",
-            headers: {
-                "X-API-KEY": apiKey,
-            },
-            body: formData,
+            headers,
+            body: await createFormData(),
         });
+
+        // If people endpoint fails (e.g. 404 or unsupported on current plan), retry with general endpoint
+        if (!apiResponse.ok && isPeople) {
+            console.warn(`Primary endpoint failed (${apiResponse.status}), retrying with general /results endpoint...`);
+            const fallbackUrl = `${baseUrl}/results?api_key=${encodeURIComponent(apiKey)}`;
+            apiResponse = await fetch(fallbackUrl, {
+                method: "POST",
+                headers,
+                body: await createFormData(),
+            });
+        }
 
         if (!apiResponse.ok) {
             const errText = await apiResponse.text();
             console.error("API4AI request failed with HTTP " + apiResponse.status + ":", errText);
-            return NextResponse.json({ error: `Background removal API failed: ${errText || apiResponse.statusText}` }, { status: 502 });
+            return NextResponse.json({ error: `Background removal API error: ${errText || apiResponse.statusText}` }, { status: 400 });
         }
 
         const data = await apiResponse.json();
@@ -171,7 +189,7 @@ export async function POST(request: NextRequest) {
 
         if (!base64String) {
             console.error("API4AI response missing image. Full response:", JSON.stringify(data));
-            return NextResponse.json({ error: "No processed image returned from background removal service" }, { status: 502 });
+            return NextResponse.json({ error: "No processed image returned from background removal service" }, { status: 422 });
         }
 
         // 3. Convert base64 result to a Buffer and upload to R2
