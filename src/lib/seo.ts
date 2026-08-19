@@ -8,6 +8,7 @@ export interface SEOData {
 }
 
 export async function getPageSEO(path: string): Promise<SEOData | null> {
+    if (!supabaseAdmin) return null;
     try {
         const { data, error } = await supabaseAdmin
             .from("site_seo")
@@ -33,6 +34,7 @@ export async function getPageSEO(path: string): Promise<SEOData | null> {
 }
 
 export async function getTemplateSEO(slug: string): Promise<SEOData | null> {
+    if (!supabaseAdmin) return null;
     try {
         const { data, error } = await supabaseAdmin
             .from("templates")

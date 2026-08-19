@@ -152,32 +152,43 @@ export async function getOrResetFreePreviews(userId: string) {
  */
 export async function getOrResetFreeBgRemovals(userId: string) {
     checkSupabaseConfig();
-    const { data: profile, error } = await supabaseAdmin
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-
-    if (error || !profile) return null;
-
-    const resetDate = new Date(profile.free_bg_removals_reset_at || profile.created_at || Date.now());
-    const now = new Date();
-
-    // Check if more than 24 hours (1 day) has passed since the last reset
-    const oneDayMs = 24 * 60 * 60 * 1000;
-    if (now.getTime() - resetDate.getTime() >= oneDayMs) {
-        const { data: updatedProfile } = await supabaseAdmin
+    try {
+        const { data: profile, error } = await supabaseAdmin
             .from("profiles")
-            .update({
-                free_bg_removals_remaining: 3,
-                free_bg_removals_reset_at: now.toISOString(),
-            })
+            .select("*")
             .eq("id", userId)
-            .select()
             .single();
 
-        return updatedProfile || profile;
-    }
+        if (error || !profile) {
+            return { id: userId, free_bg_removals_remaining: 3 };
+        }
 
-    return profile;
+        const resetDate = new Date(profile.free_bg_removals_reset_at || profile.created_at || Date.now());
+        const now = new Date();
+
+        // Check if more than 24 hours (1 day) has passed since the last reset
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        if (now.getTime() - resetDate.getTime() >= oneDayMs) {
+            try {
+                const { data: updatedProfile } = await supabaseAdmin
+                    .from("profiles")
+                    .update({
+                        free_bg_removals_remaining: 3,
+                        free_bg_removals_reset_at: now.toISOString(),
+                    })
+                    .eq("id", userId)
+                    .select()
+                    .single();
+
+                return updatedProfile || profile;
+            } catch {
+                return profile;
+            }
+        }
+
+        return profile;
+    } catch (err) {
+        console.warn("getOrResetFreeBgRemovals error:", err);
+        return { id: userId, free_bg_removals_remaining: 3 };
+    }
 }

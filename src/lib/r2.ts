@@ -53,11 +53,20 @@ export async function getPresignedDownloadUrl(path: string): Promise<string> {
 }
 
 export function getR2KeyFromUrl(urlStr: string): string {
+    if (!urlStr) return "";
     try {
         const url = new URL(urlStr);
-        return decodeURIComponent(url.pathname.substring(1));
+        let key = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+        if (key.startsWith(`${BUCKET_NAME}/`)) {
+            key = key.substring(BUCKET_NAME.length + 1);
+        }
+        return key;
     } catch {
-        return urlStr;
+        let key = urlStr.replace(/^\/+/, "");
+        if (key.startsWith(`${BUCKET_NAME}/`)) {
+            key = key.substring(BUCKET_NAME.length + 1);
+        }
+        return key;
     }
 }
 

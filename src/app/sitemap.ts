@@ -5,17 +5,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const baseUrl = 'https://celitepro.com'; // Adjust this to your actual domain
 
     // Fetch all active templates for dynamic routes
-    const { data: templates } = await supabaseAdmin
-        .from('templates')
-        .select('slug, updated_at')
-        .eq('is_active', true);
+    let templateEntries: MetadataRoute.Sitemap = [];
+    if (supabaseAdmin) {
+        try {
+            const { data: templates } = await supabaseAdmin
+                .from('templates')
+                .select('slug, updated_at')
+                .eq('is_active', true);
 
-    const templateEntries: MetadataRoute.Sitemap = (templates || []).map((template: any) => ({
-        url: `${baseUrl}/templates/${template.slug}`,
-        lastModified: template.updated_at ? new Date(template.updated_at) : new Date(),
-        changeFrequency: 'weekly',
-        priority: 0.7,
-    }));
+            templateEntries = (templates || []).map((template: any) => ({
+                url: `${baseUrl}/templates/${template.slug}`,
+                lastModified: template.updated_at ? new Date(template.updated_at) : new Date(),
+                changeFrequency: 'weekly',
+                priority: 0.7,
+            }));
+        } catch {}
+    }
 
     // Static pages
     const staticPages: MetadataRoute.Sitemap = [
