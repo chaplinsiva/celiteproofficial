@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkSupabaseConfig, supabaseAdmin, getAuthenticatedUser } from "@/lib/supabase-admin";
 import { getRazorpayInstance, getSinglePayAmount } from "@/lib/razorpay";
+import { convertPaiseToUSD } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { templateId, projectId, singlePay, oneTimePurchase } = body;
+        const { templateId, projectId, singlePay, oneTimePurchase, currency = "INR" } = body;
 
         if (!templateId) {
             return NextResponse.json(
@@ -60,11 +61,16 @@ export async function POST(request: NextRequest) {
             amount = template.price || 19900;
         }
 
+        // Calculate amount and currency for Razorpay
+        const isUSD = currency === "USD";
+        const orderAmount = isUSD ? convertPaiseToUSD(amount) * 100 : amount;
+        const orderCurrency = isUSD ? "USD" : "INR";
+
         // Create Razorpay order
         const razorpay = await getRazorpayInstance();
         const order = await razorpay.orders.create({
-            amount,
-            currency: "INR",
+            amount: orderAmount,
+            currency: orderCurrency,
             receipt: `receipt_${Date.now()}`,
             notes: {
                 templateId,
@@ -74,6 +80,7 @@ export async function POST(request: NextRequest) {
                 singlePay: singlePay ? "true" : "false",
                 oneTimePurchase: oneTimePurchase ? "true" : "false",
                 creditCost: String(template.credit_cost || 20),
+                currency: orderCurrency,
             },
         });
 
@@ -84,8 +91,8 @@ export async function POST(request: NextRequest) {
                 user_id: userId,
                 template_id: templateId,
                 razorpay_order_id: order.id,
-                amount,
-                currency: "INR",
+                amount: orderAmount,
+                currency: orderCurrency,
                 status: "created",
             })
             .select()
@@ -107,8 +114,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             orderId: order.id,
-            amount,
-            currency: "INR",
+            amount: orderAmount,
+            currency: orderCurrency,
             keyId: config?.key_id,
             paymentId: payment.id,
         });
@@ -121,3 +128,4 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+

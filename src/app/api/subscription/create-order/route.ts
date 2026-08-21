@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkSupabaseConfig, supabaseAdmin, getAuthenticatedUser } from "@/lib/supabase-admin";
 import { getRazorpayInstance } from "@/lib/razorpay";
+import { convertPaiseToUSD } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { planId, fullName, companyName, email, phone } = body;
+        const { planId, fullName, companyName, email, phone, currency = "INR" } = body;
 
         if (!planId || !fullName || !email || !phone) {
             return NextResponse.json(
@@ -47,11 +48,18 @@ export async function POST(request: NextRequest) {
             .gte("valid_until", new Date().toISOString())
             .maybeSingle();
 
+        // Calculate amount and currency for Razorpay
+        const isUSD = currency === "USD";
+        // For USD: rounded whole dollar amount in cents (e.g. $10 -> 1000 cents)
+        // For INR: price_total in paise (e.g. ₹899 -> 89900 paise)
+        const orderAmount = isUSD ? convertPaiseToUSD(plan.price_total) * 100 : plan.price_total;
+        const orderCurrency = isUSD ? "USD" : "INR";
+
         // Create Razorpay order
         const razorpay = await getRazorpayInstance();
         const order = await razorpay.orders.create({
-            amount: plan.price_total,
-            currency: "INR",
+            amount: orderAmount,
+            currency: orderCurrency,
             receipt: `sub_${Date.now()}`,
             notes: {
                 planId: plan.id,
@@ -60,6 +68,7 @@ export async function POST(request: NextRequest) {
                 companyName: companyName || "",
                 email,
                 phone,
+                currency: orderCurrency,
                 isUpgrade: existingSub ? "true" : "false",
                 existingSubId: existingSub?.id || "",
             },
@@ -77,7 +86,7 @@ export async function POST(request: NextRequest) {
                 phone,
                 status: "initialized",
                 razorpay_order_id: order.id,
-                amount: plan.price_total
+                amount: orderAmount
             });
 
         if (dbError) {
@@ -93,8 +102,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             orderId: order.id,
-            amount: plan.price_total,
-            currency: "INR",
+            amount: orderAmount,
+            currency: orderCurrency,
             keyId: config?.key_id,
             plan: {
                 id: plan.id,
@@ -114,3 +123,4 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+

@@ -126,6 +126,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
                 },
                 body: JSON.stringify({
                     planId: plan.id,
+                    currency,
                     ...formData
                 }),
             });
@@ -323,7 +324,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
                                     </span>
                                     {currency === "USD" && (
                                         <div className="text-[11px] text-slate-400 font-medium mt-0.5">
-                                            Charged as ₹{formatINR(plan.price_total)} INR
+                                            Billed in USD via Razorpay
                                         </div>
                                     )}
                                 </div>
