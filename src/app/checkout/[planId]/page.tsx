@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { Currency, getSavedCurrency, saveCurrency, formatINR, formatUSD } from "@/lib/currency";
+import CurrencyToggle from "@/components/CurrencyToggle";
 
 interface Plan {
     id: string;
@@ -24,6 +26,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
+    const [currency, setCurrency] = useState<Currency>("INR");
 
     // Form State
     const [formData, setFormData] = useState({
@@ -36,12 +39,28 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
     const router = useRouter();
 
     useEffect(() => {
+        if (typeof window !== "undefined") {
+            const urlParams = new URLSearchParams(window.location.search);
+            const paramCurrency = urlParams.get("currency") as Currency | null;
+            if (paramCurrency === "USD" || paramCurrency === "INR") {
+                setCurrency(paramCurrency);
+                saveCurrency(paramCurrency);
+            } else {
+                setCurrency(getSavedCurrency());
+            }
+        }
+
         const init = async () => {
             await checkUser();
             await fetchPlan();
         };
         init();
     }, [planId]);
+
+    const handleCurrencyChange = (newCurrency: Currency) => {
+        setCurrency(newCurrency);
+        saveCurrency(newCurrency);
+    };
 
     const checkUser = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -157,10 +176,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
         }
     };
 
-    const formatPrice = (paise: number) => {
-        return new Intl.NumberFormat("en-IN").format(paise / 100);
-    };
-
     if (loading) {
         return (
             <main className="min-h-screen bg-white flex items-center justify-center">
@@ -174,10 +189,13 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
     return (
         <main className="min-h-screen bg-white text-slate-800 py-12 px-6">
             <div className="max-w-4xl mx-auto">
-                <Link href="/pricing" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-950 transition-colors mb-8 group font-medium">
-                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                    Back to Plans
-                </Link>
+                <div className="flex items-center justify-between mb-8">
+                    <Link href="/pricing" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-950 transition-colors group font-medium">
+                        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                        Back to Plans
+                    </Link>
+                    <CurrencyToggle currency={currency} onChange={handleCurrencyChange} />
+                </div>
 
                 <form onSubmit={handlePayment} className="grid lg:grid-cols-2 gap-12">
                     {/* Left: Summary & Form */}
@@ -273,28 +291,42 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
                         <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
                             <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
                             <p className="text-xs text-emerald-700 font-medium">
-                                Secure encrypted payment via Razorpay. Your data is safe with us.
+                                Secure encrypted payment via Razorpay. International cards (Visa, Mastercard, Amex) supported.
                             </p>
                         </div>
                     </div>
 
                     {/* Right: Payment Card */}
                     <div className="bg-slate-50 border border-slate-205 rounded-3xl p-8 flex flex-col h-fit sticky top-24 shadow-lg hover:shadow-xl transition-shadow">
-                        <h3 className="text-lg font-bold mb-6 text-slate-900">Payment Summary</h3>
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-lg font-bold text-slate-900">Payment Summary</h3>
+                            <CurrencyToggle currency={currency} onChange={handleCurrencyChange} showLabel={false} />
+                        </div>
 
                         <div className="space-y-4 mb-8">
                             <div className="flex justify-between text-slate-500">
                                 <span>{plan.name} Subscription</span>
-                                <span className="font-semibold text-slate-800">₹{formatPrice(plan.price_total)}</span>
+                                <span className="font-semibold text-slate-800">
+                                    {currency === "USD" ? `$${formatUSD(plan.price_total)}` : `₹${formatINR(plan.price_total)}`}
+                                </span>
                             </div>
                             <div className="flex justify-between text-slate-500">
                                 <span>Platform Fee</span>
                                 <span className="text-emerald-600 font-semibold">Free</span>
                             </div>
                             <hr className="border-slate-200" />
-                            <div className="flex justify-between text-xl font-bold text-slate-900">
+                            <div className="flex justify-between items-baseline text-xl font-bold text-slate-900">
                                 <span>Total Amount</span>
-                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-500">₹{formatPrice(plan.price_total)}</span>
+                                <div className="text-right">
+                                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-500 text-2xl font-extrabold">
+                                        {currency === "USD" ? `$${formatUSD(plan.price_total)}` : `₹${formatINR(plan.price_total)}`}
+                                    </span>
+                                    {currency === "USD" && (
+                                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">
+                                            Charged as ₹{formatINR(plan.price_total)} INR
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
@@ -308,11 +340,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
                             ) : (
                                 <CreditCard className="w-5 h-5" />
                             )}
-                            {processing ? "Processing..." : `Pay ₹${formatPrice(plan.price_total)} & Subscribe`}
+                            {processing ? "Processing..." : currency === "USD" ? `Pay $${formatUSD(plan.price_total)} & Subscribe` : `Pay ₹${formatINR(plan.price_total)} & Subscribe`}
                         </button>
 
                         <p className="text-[10px] text-slate-500 text-center mt-6">
-                            By clicking the button above, you agree to our Terms of Service and Privacy Policy. All payments are securely processed.
+                            By clicking the button above, you agree to our Terms of Service and Privacy Policy. All domestic and international payments are securely processed.
                         </p>
                     </div>
                 </form>
@@ -322,3 +354,4 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
         </main>
     );
 }
+

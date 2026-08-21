@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { Currency, getSavedCurrency, saveCurrency, formatINR, formatUSD } from "@/lib/currency";
+import CurrencyToggle from "@/components/CurrencyToggle";
 
 interface Plan {
     id: string;
@@ -23,12 +25,19 @@ export default function PricingPage() {
     const [loading, setLoading] = useState(true);
     const [processingPlan, setProcessingPlan] = useState<string | null>(null);
     const [userId, setUserId] = useState<string | null>(null);
+    const [currency, setCurrency] = useState<Currency>("INR");
     const router = useRouter();
 
     useEffect(() => {
+        setCurrency(getSavedCurrency());
         fetchPlans();
         checkUser();
     }, []);
+
+    const handleCurrencyChange = (newCurrency: Currency) => {
+        setCurrency(newCurrency);
+        saveCurrency(newCurrency);
+    };
 
     const checkUser = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -56,7 +65,7 @@ export default function PricingPage() {
             return;
         }
 
-        router.push(`/checkout/${plan.id}`);
+        router.push(`/checkout/${plan.id}?currency=${currency}`);
     };
 
     const currentPlans = plans.monthly;
@@ -77,10 +86,6 @@ export default function PricingPage() {
             case "Pro": return "from-amber-500 to-orange-500";
             default: return "from-gray-500 to-gray-600";
         }
-    };
-
-    const formatPrice = (paise: number) => {
-        return new Intl.NumberFormat("en-IN").format(paise / 100);
     };
 
     if (loading) {
@@ -106,22 +111,30 @@ export default function PricingPage() {
                             CelitePro
                         </span>
                     </Link>
-                    <Link href="/templates" className="text-xs sm:text-sm font-medium text-slate-550 hover:text-slate-900 transition-colors">
-                        Browse Templates
-                    </Link>
+                    <div className="flex items-center gap-4">
+                        <CurrencyToggle currency={currency} onChange={handleCurrencyChange} showLabel={false} />
+                        <Link href="/templates" className="text-xs sm:text-sm font-medium text-slate-550 hover:text-slate-900 transition-colors">
+                            Browse Templates
+                        </Link>
+                    </div>
                 </div>
             </header>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
                 {/* Hero */}
-                <div className="text-center mb-16">
+                <div className="text-center mb-12">
                     <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-500">
                         Choose Your Plan
                     </h1>
-                    <p className="text-slate-500 max-w-2xl mx-auto mb-10">
+                    <p className="text-slate-500 max-w-2xl mx-auto mb-8">
                         Unlock professional video templates with our credit-based plans.
                         Get more credits to render your videos easily.
                     </p>
+
+                    {/* Central Currency Toggle Switch */}
+                    <div className="inline-flex items-center justify-center p-1.5 bg-slate-50 border border-slate-200/90 rounded-2xl shadow-sm">
+                        <CurrencyToggle currency={currency} onChange={handleCurrencyChange} />
+                    </div>
                 </div>
 
                 {/* Plans Grid */}
@@ -155,16 +168,23 @@ export default function PricingPage() {
                                 {/* Price */}
                                 <div className="mb-6">
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-4xl font-bold text-slate-900">₹{formatPrice(plan.price_monthly)}</span>
+                                        <span className="text-4xl font-bold text-slate-900">
+                                            {currency === "USD" ? `$${formatUSD(plan.price_monthly)}` : `₹${formatINR(plan.price_monthly)}`}
+                                        </span>
                                         <span className="text-slate-550">/mo</span>
                                     </div>
+                                    {currency === "USD" && (
+                                        <p className="text-xs text-slate-400 mt-1 font-medium">
+                                            ≈ ₹{formatINR(plan.price_monthly)} INR
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Features */}
                                 <ul className="space-y-4 mb-8">
                                     <li className="flex items-center gap-3">
                                         <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center">
-                                            <Video className="w-3 h-3 text-emerald-600" />
+                                             <Video className="w-3 h-3 text-emerald-600" />
                                         </div>
                                         <span className="text-slate-600">
                                             {plan.render_limit ? `${plan.render_limit} credits / month` : "Unlimited credits"}
@@ -231,3 +251,4 @@ export default function PricingPage() {
         </main>
     );
 }
+
