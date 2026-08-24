@@ -1,3 +1,4 @@
+// agent-notes: { ctx: "Admin template detail, update and delete route", deps: ["src/lib/supabase-admin.ts"], state: active, last: "sato@2026-08-24" }
 import { NextRequest, NextResponse } from "next/server";
 import { checkSupabaseConfig, supabaseAdmin, verifyAdminRequest } from "@/lib/supabase-admin";
 

@@ -12,7 +12,8 @@ import {
     Type, Image as LucideImage,
     Loader2, Sparkles, Upload, X, Crop as CropIcon, Check,
     ZoomIn, ZoomOut, RotateCcw, Move, RefreshCw, Eye, Crown, AlertTriangle,
-    XCircle, Edit3, Maximize2, Minimize2
+    XCircle, Edit3, Maximize2, Minimize2, Zap, ArrowRight, ShieldCheck, CheckCircle2, CreditCard,
+    Search, Clock, Layers
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,6 +21,7 @@ import { Cropper, ReactCropperElement } from "react-cropper";
 import "cropperjs/dist/cropper.css";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import LoadingFunnyVibes from "@/components/LoadingFunnyVibes";
 
 interface ImagePlaceholder {
     key: string;
@@ -45,6 +47,7 @@ interface Template {
     preview_url: string;
     thumbnail_url: string;
     duration?: string;
+    credit_cost?: number;
     image_placeholders: ImagePlaceholder[];
     text_placeholders: TextPlaceholder[];
 }
@@ -131,6 +134,19 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
     const [freeBgRemovalsRemaining, setFreeBgRemovalsRemaining] = useState<number | null>(null);
     const [showBgMenu, setShowBgMenu] = useState<string | null>(null);
     const [showPurchasePopup, setShowPurchasePopup] = useState(false);
+    const [sidebarFilter, setSidebarFilter] = useState<"all" | "images" | "texts">("all");
+    const [sidebarSearch, setSidebarSearch] = useState<string>("");
+    const sidebarItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+    // Smoothly scroll the selected placeholder element into view in the sidebar
+    useEffect(() => {
+        if (activePlaceholder && sidebarItemRefs.current[activePlaceholder]) {
+            sidebarItemRefs.current[activePlaceholder]?.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest"
+            });
+        }
+    }, [activePlaceholder]);
 
     // In-Editor Free Preview State
     const [previewJobId, setPreviewJobId] = useState<string | null>(null);
@@ -1154,28 +1170,21 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 }
             });
             const subData = await subRes.json();
+            setSubscription(subData);
 
-            // Check if user can render — active subscription or expired credits
-            const canRender = subData.hasSubscription || (subData.hasExpiredCredits && subData.expiredCredits);
-            if (!canRender) {
-                toast.error("No active subscription. Please subscribe to render HD videos.");
-                setIsRendering(false);
-                return;
-            }
+            const templateCost = template.credit_cost || 20;
+            const userRemainingCredits = subData?.subscription?.rendersRemaining ?? 0;
+            const isUnlimited = subData?.hasSubscription && subData?.plan?.renderLimit === null;
 
-            // Check render limits for active subscriptions
-            if (subData.hasSubscription && subData.plan?.renderLimit && subData.warnings?.rendersExhausted) {
-                toast.error(`Render limit reached (${subData.subscription?.rendersUsed}/${subData.plan.renderLimit}). Please upgrade your plan for more renders.`);
-                setIsRendering(false);
-                router.push("/pricing");
-                return;
-            }
+            // Check if user has enough credits
+            const hasEnoughCredits = isUnlimited || (
+                (subData.hasSubscription || (subData.hasExpiredCredits && subData.expiredCredits)) &&
+                userRemainingCredits >= templateCost
+            );
 
-            // For expired subscribers: check if they still have credits left
-            if (!subData.hasSubscription && subData.hasExpiredCredits && subData.expiredCredits?.remaining === 0) {
-                toast.error("Your expired subscription credits are exhausted. Please renew your plan.");
-                router.push("/pricing");
+            if (!hasEnoughCredits) {
                 setIsRendering(false);
+                setShowPurchasePopup(true);
                 return;
             }
 
@@ -1208,6 +1217,11 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
             const renderData = await renderRes.json();
 
             if (!renderRes.ok) {
+                if (renderRes.status === 402 || renderRes.status === 403 || renderData.error?.toLowerCase().includes("credit") || renderData.error?.toLowerCase().includes("subscription")) {
+                    setIsRendering(false);
+                    setShowPurchasePopup(true);
+                    return;
+                }
                 throw new Error(renderData.error || "Failed to start render");
             }
 
@@ -1680,58 +1694,143 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 )}
             </AnimatePresence>
 
-            {/* ── Subscribe Popup ─────────────────────────────────── */}
+            {/* ── Aesthetic Insufficient Credits & Subscription Popup ─────────────────────────────────── */}
             <AnimatePresence>
-                {showPurchasePopup && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
-                        onClick={() => setShowPurchasePopup(false)}
-                    >
+                {showPurchasePopup && (() => {
+                    const templateCost = template?.credit_cost || 20;
+                    const userCredits = subscription?.subscription?.rendersRemaining ?? 0;
+                    const shortfall = Math.max(0, templateCost - userCredits);
+                    const hasSub = subscription?.hasSubscription;
+
+                    return (
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="bg-white border border-slate-200 p-6 sm:p-8 rounded-3xl max-w-md w-full shadow-2xl relative"
-                            onClick={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/75 backdrop-blur-md z-[200] flex items-center justify-center p-4"
+                            onClick={() => setShowPurchasePopup(false)}
                         >
-                            <button
-                                onClick={() => setShowPurchasePopup(false)}
-                                className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 transition-colors"
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.92, y: 24 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.92, y: 24 }}
+                                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                                className="relative w-full max-w-lg bg-gradient-to-b from-[#131625] to-[#0b0d17] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-[0_0_80px_rgba(99,102,241,0.3)] text-white overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
                             >
-                                <X className="w-5 h-5" />
-                            </button>
+                                {/* Background ambient glow */}
+                                <div className="absolute -top-24 -left-24 w-72 h-72 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 rounded-full blur-3xl pointer-events-none" />
+                                <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-gradient-to-tl from-amber-500/15 via-rose-500/15 to-transparent rounded-full blur-3xl pointer-events-none" />
 
-                            <div className="flex flex-col items-center text-center mb-6">
-                                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-4 border border-indigo-100">
-                                    <Crown className="w-8 h-8 text-amber-500" />
-                                </div>
-                                <h3 className="text-2xl font-bold text-slate-900 mb-2">Subscribe to Render</h3>
-                                <p className="text-slate-500 text-sm">
-                                    Subscribe to unlock HD rendering for <strong className="text-slate-900">{template?.title}</strong> and all other templates.
-                                </p>
-                            </div>
-
-                            <div className="flex flex-col gap-3">
+                                {/* Close Button */}
                                 <button
-                                    onClick={() => { setShowPurchasePopup(false); router.push("/pricing"); }}
-                                    className="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl shadow-[0_0_20px_rgba(79,70,229,0.3)] transition-all flex items-center justify-between gap-3"
+                                    onClick={() => setShowPurchasePopup(false)}
+                                    className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors border border-white/5"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <Crown className="w-5 h-5 shrink-0" />
-                                        <div className="text-left">
-                                            <div className="text-sm font-bold">Subscribe</div>
-                                            <div className="text-xs font-normal text-indigo-200">Unlimited renders across all templates</div>
+                                    <X className="w-4 h-4" />
+                                </button>
+
+                                {/* Header & Icon */}
+                                <div className="flex flex-col items-center text-center relative z-10">
+                                    <div className="relative mb-4">
+                                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500/20 via-rose-500/20 to-indigo-500/20 border border-amber-500/30 flex items-center justify-center shadow-[0_0_25px_rgba(245,158,11,0.25)]">
+                                            <Zap className="w-8 h-8 text-amber-400 animate-pulse" />
+                                        </div>
+                                        <div className="absolute -top-1.5 -right-1.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-rose-500 to-amber-500 text-[10px] font-black uppercase tracking-wider text-white shadow-sm">
+                                            Credits Needed
                                         </div>
                                     </div>
-                                    <span className="text-xs font-bold text-white/80 shrink-0">View Plans →</span>
-                                </button>
-                            </div>
+
+                                    <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white mb-1.5">
+                                        {hasSub ? "Insufficient Render Credits" : "Subscribe to Render in Full HD"}
+                                    </h3>
+                                    <p className="text-xs sm:text-sm text-gray-400 max-w-sm">
+                                        Rendering <strong className="text-white font-semibold">{template?.title}</strong> requires <span className="text-amber-400 font-bold">{templateCost} credits</span>.
+                                    </p>
+                                </div>
+
+                                {/* Video Demonstration in Loop */}
+                                <div className="relative w-full rounded-2xl overflow-hidden border border-white/15 bg-black/50 shadow-[0_0_35px_rgba(0,0,0,0.6)] my-4 group aspect-[16/9] flex items-center justify-center">
+                                    <video
+                                        src="/RENDER-1.mp4"
+                                        autoPlay
+                                        loop
+                                        muted
+                                        playsInline
+                                        className="w-full h-full object-cover"
+                                    />
+                                    {/* Video Overlay Badge */}
+                                    <div className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[10px] font-bold text-white flex items-center gap-1.5 shadow-sm">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                        <span>4K Ultra-HD Quality</span>
+                                    </div>
+                                </div>
+
+                                {/* Credit Balance Breakdown Card */}
+                                <div className="grid grid-cols-3 gap-2 sm:gap-3 my-4 relative z-10">
+                                    <div className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
+                                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Required</div>
+                                        <div className="text-lg sm:text-xl font-extrabold text-amber-400">{templateCost}</div>
+                                        <div className="text-[9px] text-gray-500 font-medium">Credits</div>
+                                    </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
+                                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Your Balance</div>
+                                        <div className="text-lg sm:text-xl font-extrabold text-indigo-400">{userCredits}</div>
+                                        <div className="text-[9px] text-gray-500 font-medium">{hasSub ? "Active" : "Credits"}</div>
+                                    </div>
+                                    <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-3 text-center">
+                                        <div className="text-[10px] font-bold uppercase tracking-wider text-rose-300 mb-1">Shortfall</div>
+                                        <div className="text-lg sm:text-xl font-extrabold text-rose-400">+{shortfall}</div>
+                                        <div className="text-[9px] text-rose-300/70 font-medium">Needed</div>
+                                    </div>
+                                </div>
+
+                                {/* Perks / Feature Grid */}
+                                <div className="space-y-2 mb-6 bg-white/[0.02] border border-white/5 rounded-2xl p-3.5 relative z-10">
+                                    {[
+                                        { title: "Monthly Offer Plan (40 Credits / mo)", desc: "Starting at just ₹499/mo (40 HD video renders)", icon: Crown, color: "text-amber-400" },
+                                        { title: "Full 1080p Ultra-HD Video Export", desc: "Crisp 60fps MP4 with zero watermark", icon: Sparkles, color: "text-purple-400" },
+                                        { title: "Cloud Storage & Instant GPU Rendering", desc: "Up to 100GB secure cloud storage with priority queue", icon: ShieldCheck, color: "text-emerald-400" }
+                                    ].map((feat, idx) => {
+                                        const Icon = feat.icon;
+                                        return (
+                                            <div key={idx} className="flex items-start gap-2.5">
+                                                <div className={`p-1 rounded-lg bg-white/5 ${feat.color} shrink-0 mt-0.5`}>
+                                                    <Icon className="w-3.5 h-3.5" />
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-white leading-tight">{feat.title}</div>
+                                                    <div className="text-[11px] text-gray-400 leading-snug">{feat.desc}</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex flex-col gap-2.5 relative z-10">
+                                    <button
+                                        onClick={() => {
+                                            setShowPurchasePopup(false);
+                                            router.push("/pricing");
+                                        }}
+                                        className="w-full py-3.5 px-6 rounded-2xl font-extrabold text-sm text-white bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 shadow-[0_0_30px_rgba(168,85,247,0.4)] hover:shadow-[0_0_40px_rgba(168,85,247,0.6)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                                    >
+                                        <span>View Subscription Plans & Offers</span>
+                                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                    </button>
+
+                                    <button
+                                        onClick={() => setShowPurchasePopup(false)}
+                                        className="w-full py-2.5 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+                                    >
+                                        Save Draft & Continue Editing
+                                    </button>
+                                </div>
+                            </motion.div>
                         </motion.div>
-                    </motion.div>
-                )}
+                    );
+                })()}
             </AnimatePresence>
 
             {/* Header */}
@@ -1757,8 +1856,8 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 </div>
 
                 <div className="flex items-center gap-2 md:gap-3">
-                    {/* Preview Tracker for Free Users */}
-                    {!subscription?.hasSubscription && subscription?.subscription && (
+                    {/* Preview Tracker for Free & Welcome Gift Users */}
+                    {!subscription?.hasPaidSubscription && subscription?.subscription?.previewLimit && (
                         <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
                             <div className="flex flex-col items-end">
                                 <span className="text-[9px] font-bold text-slate-500 uppercase leading-none mb-1">Free Previews</span>
@@ -1787,7 +1886,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                     </button>
                     <button
                         onClick={() => {
-                            if (!subscription?.hasSubscription && subscription?.warnings?.previewsExhausted) {
+                            if (!subscription?.hasPaidSubscription && subscription?.warnings?.previewsExhausted) {
                                 toast.error("Free preview limit reached. Upgrade for unlimited previews!");
                                 router.push("/pricing");
                                 return;
@@ -1797,7 +1896,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         disabled={isRendering || uploadingKeys.size > 0}
                         className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-800 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shrink-0"
                         title={
-                            subscription?.hasSubscription
+                            subscription?.hasPaidSubscription
                                 ? "Preview your edits (Unlimited)"
                                 : subscription?.warnings?.previewsExhausted
                                     ? "Preview limit reached. Upgrade to continue."
@@ -1814,23 +1913,18 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                     </button>
                     <button
                         onClick={() => {
-                            // Subscription exhausted? Treat as "no valid render right"
-                            const subExhausted = subscription?.hasSubscription
-                                && subscription?.plan?.renderLimit
-                                && subscription?.warnings?.rendersExhausted;
+                            const templateCost = template?.credit_cost || 20;
+                            const userRemainingCredits = subscription?.subscription?.rendersRemaining ?? 0;
+                            const isUnlimited = subscription?.hasSubscription && subscription?.plan?.renderLimit === null;
 
-                            const canRenderViaSubscription =
-                                subscription?.hasSubscription && !subExhausted;
-                            const canRenderViaExpiredCredits =
-                                subscription?.hasExpiredCredits && subscription?.expiredCredits
-                                && subscription?.expiredCredits?.remaining > 0;
+                            const hasEnoughCredits = isUnlimited || (
+                                (subscription?.hasSubscription || (subscription?.hasExpiredCredits && subscription?.expiredCredits)) &&
+                                userRemainingCredits >= templateCost
+                            );
 
-                            const canRender = canRenderViaSubscription || canRenderViaExpiredCredits;
-
-                            if (canRender) {
+                            if (hasEnoughCredits) {
                                 setShowRenderConfirm(true);
                             } else {
-                                // No valid subscription — prompt to subscribe
                                 setShowPurchasePopup(true);
                             }
                         }}
@@ -1845,14 +1939,17 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                     <><Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> <span className="hidden xs:inline">Uploading...</span></>
                                 ) : (
                                     (() => {
-                                        const subExhausted = subscription?.hasSubscription
-                                            && subscription?.plan?.renderLimit
-                                            && subscription?.warnings?.rendersExhausted;
-                                        const canRenderNormally = (subscription?.hasSubscription && !subExhausted)
-                                            || subscription?.hasExpiredCredits;
-                                        return canRenderNormally
+                                        const templateCost = template?.credit_cost || 20;
+                                        const userRemainingCredits = subscription?.subscription?.rendersRemaining ?? 0;
+                                        const isUnlimited = subscription?.hasSubscription && subscription?.plan?.renderLimit === null;
+                                        const hasEnoughCredits = isUnlimited || (
+                                            (subscription?.hasSubscription || (subscription?.hasExpiredCredits && subscription?.expiredCredits)) &&
+                                            userRemainingCredits >= templateCost
+                                        );
+
+                                        return hasEnoughCredits
                                             ? <><Download className="w-3 h-3 sm:w-4 sm:h-4" /> Render HD</>
-                                            : <><Crown className="w-3 h-3 sm:w-4 sm:h-4" /> {subExhausted ? "Quota Full" : "Render HD"}</>;
+                                            : <><Zap className="w-3 h-3 sm:w-4 sm:h-4 text-amber-400" /> {subscription?.hasSubscription ? `Need ${templateCost} Credits` : "Render HD"}</>;
                                     })()
                                 )}
                             </>
@@ -1978,10 +2075,13 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center justify-between text-[10px] text-slate-200 font-medium">
+                                            <div className="flex items-center justify-between text-[10px] text-slate-200 font-medium mb-3">
                                                 <span>Progress</span>
                                                 <span className="font-mono text-white font-bold">{Math.round(previewDisplayProgress)}%</span>
                                             </div>
+
+                                            {/* Funny Loading GIF with Switch Button */}
+                                            <LoadingFunnyVibes variant="compact" />
                                         </div>
                                     </motion.div>
                                 )}
@@ -2317,293 +2417,444 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
 
                     </div>
 
-                    {/* Dynamic Asset Panel */}
-                    <aside className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50/60 p-5 pb-16 flex flex-col gap-4 shrink-0 overflow-visible lg:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:bg-transparent">
-                        {(() => {
-                            const activeImgPlaceholder = template.image_placeholders?.find(p => p.key === activePlaceholder);
-                            const activeTxtPlaceholder = template.text_placeholders?.find(p => p.key === activePlaceholder);
-                            
-                            if (activeImgPlaceholder) {
-                                const placeholder = activeImgPlaceholder;
-                                const isUploaded = !!images[placeholder.key];
-                                const currentImageSrc = images[placeholder.key] || placeholder.referenceImageUrl;
-                                return (
-                                    <div className="flex flex-col gap-5">
-                                        {/* Properties Header */}
-                                        <div className="flex flex-col gap-1 border-b border-slate-200/80 pb-4">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-[10px] bg-indigo-50 text-indigo-650 border border-indigo-150 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Image Asset</span>
-                                                <span className="text-[10px] text-slate-400 font-mono">Key: {placeholder.key}</span>
-                                            </div>
-                                            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mt-2">{placeholder.label}</h3>
-                                            <span className="text-[10px] text-slate-500 font-medium">Required ratio: <strong className="text-slate-700 font-mono">{placeholder.aspectRatio}</strong></span>
-                                        </div>
-
-                                        {/* Large visual preview container */}
-                                        <div className="space-y-3">
-                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Asset Preview</label>
-                                            
-                                            <div className="relative group/sidebar-preview w-full rounded-2xl border border-slate-200 bg-slate-100/50 overflow-hidden flex flex-col items-center justify-center p-3 transition-all duration-300 hover:border-indigo-500/30">
-                                                <div 
-                                                    style={{ aspectRatio: parseAspectRatio(placeholder.aspectRatio).ratio }} 
-                                                    className="w-full relative rounded-xl overflow-hidden bg-slate-200/55 flex items-center justify-center border border-slate-200 max-h-[220px]"
-                                                >
-                                                    {isUploaded && placeholder.referenceImageUrl && (
-                                                        <img 
-                                                            src={placeholder.referenceImageUrl} 
-                                                            alt="Reference guide shadow" 
-                                                            className="absolute inset-0 w-full h-full object-cover opacity-15 pointer-events-none"
-                                                        />
-                                                    )}
-                                                    
-                                                    {currentImageSrc ? (
-                                                        <img 
-                                                            src={currentImageSrc} 
-                                                            alt={placeholder.label} 
-                                                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl z-10"
-                                                        />
-                                                    ) : (
-                                                        <div className="flex flex-col items-center justify-center gap-3 py-10">
-                                                            <div className="w-12 h-12 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center">
-                                                                <LucideImage className="w-5 h-5 text-slate-400" />
-                                                            </div>
-                                                            <span className="text-[10px] text-slate-550 uppercase tracking-widest font-bold">No Image Uploaded</span>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Floating Small Remove Button in Corner */}
-                                                    {isUploaded && (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setImages(prev => ({ ...prev, [placeholder.key]: null }));
-                                                            }}
-                                                            className="absolute top-2 right-2 z-20 p-1.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-full border border-slate-200 transition-all shadow-md hover:scale-110 active:scale-95"
-                                                            title="Remove Image"
-                                                        >
-                                                            <X className="w-3 h-3" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Upload controls & AI Background Remover */}
-                                        <div className="space-y-3 mt-2">
-                                            <input
-                                                type="file"
-                                                className="hidden"
-                                                id={`upload-${placeholder.key}`}
-                                                accept="image/*"
-                                                onChange={(e) => handleFileChange(e, placeholder)}
-                                            />
-                                            
-                                            <button
-                                                onClick={() => {
-                                                    setActiveImageKey(placeholder.key);
-                                                    setShowUploadModal(true);
-                                                    fetchRecentUploads();
-                                                }}
-                                                className="w-full py-3 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 hover:text-slate-900 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-sm relative overflow-hidden"
-                                            >
-                                                {uploadingKeys.has(placeholder.key) ? (
-                                                    <><Loader2 className="w-4 h-4 animate-spin text-indigo-650" /> Uploading...</>
-                                                ) : (
-                                                    <><Upload className="w-4 h-4 text-indigo-600" /> {isUploaded ? 'Replace Image' : 'Upload Image'}</>
-                                                )}
-                                            </button>
-
-                                            {isUploaded && (
-                                                <>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <button
-                                                            onClick={() => {
-                                                                const imgUrl = images[placeholder.key];
-                                                                if (!imgUrl) return;
-                                                                if (imgUrl.startsWith("data:") || imgUrl.startsWith("blob:")) {
-                                                                    setImageToCrop(imgUrl);
-                                                                    setActiveImageKey(placeholder.key);
-                                                                    const parsed = parseAspectRatio(placeholder.aspectRatio);
-                                                                    setActiveAspectRatio(parsed.ratio);
-                                                                    setTargetDimensions({ width: parsed.width, height: parsed.height });
-                                                                    setShowCropper(true);
-                                                                } else {
-                                                                    const toastId = toast.loading("Preparing image for cropping...");
-                                                                    fetch(`/api/user/proxy-image?url=${encodeURIComponent(imgUrl)}`)
-                                                                        .then(res => {
-                                                                            if (!res.ok) throw new Error("Network error downloading image");
-                                                                            return res.blob();
-                                                                        })
-                                                                        .then(blob => {
-                                                                            const localUrl = URL.createObjectURL(blob);
-                                                                            setImageToCrop(localUrl);
-                                                                            setActiveImageKey(placeholder.key);
-                                                                            const parsed = parseAspectRatio(placeholder.aspectRatio);
-                                                                            setActiveAspectRatio(parsed.ratio);
-                                                                            setTargetDimensions({ width: parsed.width, height: parsed.height });
-                                                                            setShowCropper(true);
-                                                                            toast.dismiss(toastId);
-                                                                        })
-                                                                        .catch(err => {
-                                                                            console.error("CORS crop error:", err);
-                                                                            toast.error("Failed to load image for cropping. Re-uploading may be needed.", { id: toastId });
-                                                                        });
-                                                                }
-                                                            }}
-                                                            className="py-2 px-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                                                        >
-                                                            <CropIcon className="w-3.5 h-3.5 text-slate-500" /> Recrop
-                                                        </button>
-
-                                                        {removingBgKeys.has(placeholder.key) ? (
-                                                            <button
-                                                                disabled
-                                                                className="py-2 px-3 bg-indigo-50 border border-indigo-150 text-indigo-650 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1.5"
-                                                            >
-                                                                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Removing...
-                                                            </button>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => setShowBgMenu(showBgMenu === placeholder.key ? null : placeholder.key)}
-                                                                className={`py-2 px-3 border text-[11px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all ${
-                                                                    showBgMenu === placeholder.key
-                                                                        ? "bg-indigo-600 text-white border-indigo-500"
-                                                                        : "bg-indigo-50 border border-indigo-150 hover:bg-indigo-100/60 text-indigo-650"
-                                                                }`}
-                                                            >
-                                                                <Sparkles className="w-3.5 h-3.5" /> Remove BG
-                                                            </button>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Mode Selector Popover below button */}
-                                                    {showBgMenu === placeholder.key && !removingBgKeys.has(placeholder.key) && (
-                                                        <div className="flex flex-col gap-2 p-2.5 bg-indigo-50 border border-indigo-100 rounded-xl mt-2 select-none">
-                                                            <span className="text-[9px] font-bold text-indigo-700 uppercase tracking-wider text-center">Detect Subject Type</span>
-                                                            <div className="flex gap-2">
-                                                                <button
-                                                                    disabled={subscription?.isFreeUser && freeBgRemovalsRemaining !== null && freeBgRemovalsRemaining <= 0}
-                                                                    onClick={() => {
-                                                                        handleRemoveBg(placeholder.key, "people");
-                                                                        setShowBgMenu(null);
-                                                                    }}
-                                                                    className="flex-1 py-1.5 bg-indigo-600 text-white text-[11px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1"
-                                                                >
-                                                                    People
-                                                                </button>
-                                                                <button
-                                                                    disabled={subscription?.isFreeUser && freeBgRemovalsRemaining !== null && freeBgRemovalsRemaining <= 0}
-                                                                    onClick={() => {
-                                                                        handleRemoveBg(placeholder.key, "logo");
-                                                                        setShowBgMenu(null);
-                                                                    }}
-                                                                    className="flex-1 py-1.5 bg-indigo-600 text-white text-[11px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1"
-                                                                >
-                                                                    Object/Logo
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setShowBgMenu(null)}
-                                                                    className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-[11px] rounded-lg transition-all"
-                                                                >
-                                                                    Cancel
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {subscription?.isFreeUser ? (
-                                                        freeBgRemovalsRemaining !== null && freeBgRemovalsRemaining <= 0 ? (
-                                                            <div className="text-[10px] text-rose-600 font-semibold text-center mt-2 flex flex-col gap-0.5">
-                                                                <span>0 free AI removals left today.</span>
-                                                                <Link href="/pricing" target="_blank" className="text-indigo-650 hover:text-indigo-755 underline font-bold">
-                                                                    Upgrade to Pro for Unlimited!
-                                                                </Link>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-[10px] text-indigo-650/90 font-semibold text-center mt-2">
-                                                                <span>{freeBgRemovalsRemaining ?? 3} free removals left today • </span>
-                                                                <Link href="/pricing" target="_blank" className="underline hover:text-indigo-755 font-bold">
-                                                                    Upgrade
-                                                                </Link>
-                                                            </div>
-                                                        )
-                                                    ) : subscription?.hasSubscription ? (
-                                                        <div className="text-[10px] text-emerald-600 font-semibold text-center mt-2">
-                                                            Unlimited removals (Pro Member)
-                                                        </div>
-                                                    ) : null}
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            }
-
-                            if (activeTxtPlaceholder) {
-                                const placeholder = activeTxtPlaceholder;
-                                const textVal = texts[placeholder.key] || "";
-                                return (
-                                    <div className="flex flex-col gap-5">
-                                        {/* Properties Header */}
-                                        <div className="flex flex-col gap-1 border-b border-slate-200/80 pb-4">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-[10px] bg-blue-50 text-blue-650 border border-blue-150 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Text Asset</span>
-                                                <span className="text-[10px] text-slate-400 font-mono">Key: {placeholder.key}</span>
-                                            </div>
-                                            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mt-2">{placeholder.label}</h3>
-                                        </div>
-
-                                        {/* Detailed Text Input Area */}
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Configure Text</label>
-                                                <span className="text-[10px] text-slate-400 font-mono">{textVal.length} chars</span>
-                                            </div>
-                                            
-                                            <div className="relative group">
-                                                <textarea
-                                                    id={`input-${placeholder.key}`}
-                                                    className="w-full bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl py-3 px-4 text-sm text-slate-800 focus:outline-none transition-all placeholder:text-slate-400 min-h-[120px] resize-none"
-                                                    value={textVal}
-                                                    onChange={(e) => setTexts(prev => ({ ...prev, [placeholder.key]: e.target.value }))}
-                                                    placeholder={placeholder.defaultValue || `Enter ${placeholder.label}...`}
-                                                />
-                                            </div>
-
-                                            {/* Helper/Reset block */}
-                                            {placeholder.defaultValue && (
-                                                <div className="flex items-center justify-between pt-1 text-[10px] text-slate-500">
-                                                    <span className="truncate max-w-[180px]">Default: &quot;{placeholder.defaultValue}&quot;</span>
-                                                    <button 
-                                                        onClick={() => setTexts(prev => ({ ...prev, [placeholder.key]: placeholder.defaultValue }))}
-                                                        className="text-indigo-650 hover:text-indigo-755 font-semibold transition-all hover:underline"
-                                                    >
-                                                        Reset to Default
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            }
-
-                            // Fallback Navigator (if activePlaceholder is null or template data is loading)
-                            return (
-                                <div className="flex flex-col items-center justify-center text-center py-10 gap-4 h-full">
-                                    <div className="p-4 bg-indigo-50 rounded-full border border-indigo-100">
-                                        <Sparkles className="w-6 h-6 text-indigo-600 animate-pulse" />
+                    {/* All-in-One Customizable Elements Sidebar Panel */}
+                    <aside className="w-full lg:w-[380px] border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50/70 p-4 sm:p-5 flex flex-col gap-4 shrink-0 overflow-visible lg:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:bg-transparent">
+                        {/* Sidebar Header, Filter Tabs & Search */}
+                        <div className="flex flex-col gap-3 pb-3 border-b border-slate-200/80 sticky top-0 bg-slate-50/95 backdrop-blur-md z-20 pt-1 -mt-1 select-none">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-650 border border-indigo-150">
+                                        <Layers className="w-4 h-4" />
                                     </div>
                                     <div>
-                                        <p className="text-sm font-bold text-slate-800">Select an Asset</p>
-                                        <p className="text-xs text-slate-500 mt-1 max-w-[200px] leading-relaxed">
-                                            Click on any layer block in the timeline to open its properties editor.
-                                        </p>
+                                        <h2 className="text-sm font-bold text-slate-900 leading-tight">Customizable Elements</h2>
+                                        <span className="text-[10px] text-slate-500 font-medium">
+                                            {(() => {
+                                                const totalImg = template.image_placeholders?.length || 0;
+                                                const totalTxt = template.text_placeholders?.length || 0;
+                                                const filledImg = template.image_placeholders?.filter(p => !!images[p.key]).length || 0;
+                                                const filledTxt = template.text_placeholders?.filter(p => !!texts[p.key]).length || 0;
+                                                return `${filledImg + filledTxt} of ${totalImg + totalTxt} customized`;
+                                            })()}
+                                        </span>
                                     </div>
                                 </div>
-                            );
-                        })()}
 
+                                {activePlaceholder && (
+                                    <button
+                                        onClick={() => setActivePlaceholder(null)}
+                                        className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 transition-colors"
+                                    >
+                                        Deselect Layer
+                                    </button>
+                                )}
+                            </div>
 
+                            {/* Filter Tabs */}
+                            <div className="grid grid-cols-3 gap-1 bg-slate-200/70 p-1 rounded-xl text-xs font-semibold text-slate-600">
+                                <button
+                                    onClick={() => setSidebarFilter("all")}
+                                    className={`py-1.5 px-2 rounded-lg text-center transition-all ${
+                                        sidebarFilter === "all"
+                                            ? "bg-white text-slate-900 shadow-sm font-bold"
+                                            : "hover:text-slate-900"
+                                    }`}
+                                >
+                                    All ({((template.image_placeholders?.length || 0) + (template.text_placeholders?.length || 0))})
+                                </button>
+                                <button
+                                    onClick={() => setSidebarFilter("images")}
+                                    className={`py-1.5 px-2 rounded-lg text-center transition-all flex items-center justify-center gap-1 ${
+                                        sidebarFilter === "images"
+                                            ? "bg-white text-indigo-650 shadow-sm font-bold"
+                                            : "hover:text-slate-900"
+                                    }`}
+                                >
+                                    <LucideImage className="w-3 h-3" /> Images ({template.image_placeholders?.length || 0})
+                                </button>
+                                <button
+                                    onClick={() => setSidebarFilter("texts")}
+                                    className={`py-1.5 px-2 rounded-lg text-center transition-all flex items-center justify-center gap-1 ${
+                                        sidebarFilter === "texts"
+                                            ? "bg-white text-blue-650 shadow-sm font-bold"
+                                            : "hover:text-slate-900"
+                                    }`}
+                                >
+                                    <Type className="w-3 h-3" /> Texts ({template.text_placeholders?.length || 0})
+                                </button>
+                            </div>
+
+                            {/* Search bar */}
+                            <div className="relative">
+                                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                <input
+                                    type="text"
+                                    value={sidebarSearch}
+                                    onChange={(e) => setSidebarSearch(e.target.value)}
+                                    placeholder="Search elements..."
+                                    className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                                />
+                                {sidebarSearch && (
+                                    <button
+                                        onClick={() => setSidebarSearch("")}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* List of Customizable Elements */}
+                        <div className="flex flex-col gap-4">
+                            {(() => {
+                                const searchLower = sidebarSearch.trim().toLowerCase();
+                                const filteredImages = (template.image_placeholders || []).filter(p =>
+                                    sidebarFilter !== "texts" &&
+                                    (!searchLower || p.label.toLowerCase().includes(searchLower) || p.key.toLowerCase().includes(searchLower))
+                                );
+                                const filteredTexts = (template.text_placeholders || []).filter(p =>
+                                    sidebarFilter !== "images" &&
+                                    (!searchLower || p.label.toLowerCase().includes(searchLower) || p.key.toLowerCase().includes(searchLower) || (p.defaultValue || "").toLowerCase().includes(searchLower))
+                                );
+
+                                if (filteredImages.length === 0 && filteredTexts.length === 0) {
+                                    return (
+                                        <div className="flex flex-col items-center justify-center text-center py-12 gap-3 bg-white rounded-2xl border border-slate-200 p-6">
+                                            <div className="p-3 bg-slate-100 rounded-full text-slate-400">
+                                                <Search className="w-5 h-5" />
+                                            </div>
+                                            <p className="text-xs font-bold text-slate-700">No matching elements found</p>
+                                            <button
+                                                onClick={() => { setSidebarFilter("all"); setSidebarSearch(""); }}
+                                                className="text-[11px] font-semibold text-indigo-600 hover:underline"
+                                            >
+                                                Clear filters
+                                            </button>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <>
+                                        {/* Image Placeholders Section */}
+                                        {filteredImages.length > 0 && (
+                                            <div className="flex flex-col gap-3">
+                                                {sidebarFilter === "all" && (
+                                                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                                                        <LucideImage className="w-3.5 h-3.5 text-indigo-500" />
+                                                        <span>Images ({filteredImages.length})</span>
+                                                    </div>
+                                                )}
+
+                                                {filteredImages.map((placeholder) => {
+                                                    const isSelected = activePlaceholder === placeholder.key;
+                                                    const isUploaded = !!images[placeholder.key];
+                                                    const currentImageSrc = images[placeholder.key] || placeholder.referenceImageUrl;
+
+                                                    return (
+                                                        <div
+                                                            key={placeholder.key}
+                                                            ref={(el) => { sidebarItemRefs.current[placeholder.key] = el; }}
+                                                            onClick={() => {
+                                                                setActivePlaceholder(placeholder.key);
+                                                                seekTo(placeholder.previewTimestamp ?? 0);
+                                                            }}
+                                                            className={`group/card relative bg-white rounded-2xl border transition-all duration-300 p-4 shadow-sm flex flex-col gap-3 cursor-pointer ${
+                                                                isSelected
+                                                                    ? "border-indigo-500 ring-2 ring-indigo-500 shadow-[0_0_22px_rgba(99,102,241,0.35)] bg-gradient-to-b from-indigo-50/40 via-white to-white animate-pulse"
+                                                                    : "border-slate-200 hover:border-slate-300 hover:shadow-md"
+                                                            }`}
+                                                        >
+                                                            {/* Card Header */}
+                                                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <div className={`p-1.5 rounded-lg border ${
+                                                                        isSelected ? "bg-indigo-600 text-white border-indigo-600" : "bg-indigo-50 text-indigo-650 border-indigo-150"
+                                                                    }`}>
+                                                                        <LucideImage className="w-3.5 h-3.5" />
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <h4 className="text-xs font-bold text-slate-900 truncate leading-tight">{placeholder.label}</h4>
+                                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                                            <span className="text-[9px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200/60">
+                                                                                {placeholder.aspectRatio}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    seekTo(placeholder.previewTimestamp ?? 0);
+                                                                                }}
+                                                                                className="text-[9px] font-mono text-slate-500 hover:text-indigo-650 bg-slate-100 hover:bg-indigo-50 px-1.5 py-0.2 rounded border border-slate-200/60 flex items-center gap-0.5 transition-colors"
+                                                                                title="Click to seek timeline to this layer"
+                                                                            >
+                                                                                <Clock className="w-2.5 h-2.5" /> {(placeholder.previewTimestamp ?? 0).toFixed(1)}s
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex items-center gap-1.5">
+                                                                    {isSelected && (
+                                                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-600 text-white shadow-sm">
+                                                                            Active
+                                                                        </span>
+                                                                    )}
+                                                                    {isUploaded ? (
+                                                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center gap-1">
+                                                                            <Check className="w-2.5 h-2.5" /> Uploaded
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200/60">
+                                                                            Required
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Thumbnail & Actions Area */}
+                                                            <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                                                                <div
+                                                                    style={{ aspectRatio: parseAspectRatio(placeholder.aspectRatio).ratio }}
+                                                                    className="w-20 h-16 relative rounded-lg overflow-hidden bg-slate-200 flex items-center justify-center border border-slate-200 shrink-0"
+                                                                >
+                                                                    {currentImageSrc ? (
+                                                                        <img
+                                                                            src={currentImageSrc}
+                                                                            alt={placeholder.label}
+                                                                            className="w-full h-full object-contain"
+                                                                        />
+                                                                    ) : (
+                                                                        <LucideImage className="w-5 h-5 text-slate-400" />
+                                                                    )}
+                                                                </div>
+
+                                                                <div className="flex-1 flex flex-col gap-1.5 min-w-0" onClick={(e) => e.stopPropagation()}>
+                                                                    <input
+                                                                        type="file"
+                                                                        className="hidden"
+                                                                        id={`sidebar-upload-${placeholder.key}`}
+                                                                        accept="image/*"
+                                                                        onChange={(e) => handleFileChange(e, placeholder)}
+                                                                    />
+
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setActiveImageKey(placeholder.key);
+                                                                            setActivePlaceholder(placeholder.key);
+                                                                            setShowUploadModal(true);
+                                                                            fetchRecentUploads();
+                                                                        }}
+                                                                        className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                                                                    >
+                                                                        {uploadingKeys.has(placeholder.key) ? (
+                                                                            <><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</>
+                                                                        ) : (
+                                                                            <><Upload className="w-3 h-3" /> {isUploaded ? "Replace" : "Upload Image"}</>
+                                                                        )}
+                                                                    </button>
+
+                                                                    {isUploaded && (
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    const imgUrl = images[placeholder.key];
+                                                                                    if (!imgUrl) return;
+                                                                                    setActiveImageKey(placeholder.key);
+                                                                                    setActivePlaceholder(placeholder.key);
+                                                                                    const parsed = parseAspectRatio(placeholder.aspectRatio);
+                                                                                    setActiveAspectRatio(parsed.ratio);
+                                                                                    setTargetDimensions({ width: parsed.width, height: parsed.height });
+
+                                                                                    if (imgUrl.startsWith("data:") || imgUrl.startsWith("blob:")) {
+                                                                                        setImageToCrop(imgUrl);
+                                                                                        setShowCropper(true);
+                                                                                    } else {
+                                                                                        const toastId = toast.loading("Preparing image for cropping...");
+                                                                                        fetch(`/api/user/proxy-image?url=${encodeURIComponent(imgUrl)}`)
+                                                                                            .then(res => res.blob())
+                                                                                            .then(blob => {
+                                                                                                setImageToCrop(URL.createObjectURL(blob));
+                                                                                                setShowCropper(true);
+                                                                                                toast.dismiss(toastId);
+                                                                                            })
+                                                                                            .catch(() => {
+                                                                                                toast.error("Failed to load image for cropping", { id: toastId });
+                                                                                            });
+                                                                                    }
+                                                                                }}
+                                                                                className="flex-1 py-1 px-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold rounded-md text-[10px] flex items-center justify-center gap-1 transition-all"
+                                                                            >
+                                                                                <CropIcon className="w-3 h-3 text-slate-500" /> Recrop
+                                                                            </button>
+
+                                                                            {removingBgKeys.has(placeholder.key) ? (
+                                                                                <button disabled className="flex-1 py-1 px-2 bg-indigo-50 border border-indigo-150 text-indigo-650 font-semibold rounded-md text-[10px] flex items-center justify-center gap-1">
+                                                                                    <Loader2 className="w-3 h-3 animate-spin" /> Removing...
+                                                                                </button>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => setShowBgMenu(showBgMenu === placeholder.key ? null : placeholder.key)}
+                                                                                    className={`flex-1 py-1 px-2 border font-semibold rounded-md text-[10px] flex items-center justify-center gap-1 transition-all ${
+                                                                                        showBgMenu === placeholder.key
+                                                                                            ? "bg-indigo-600 text-white border-indigo-500"
+                                                                                            : "bg-white hover:bg-indigo-50 text-indigo-650 border-slate-200"
+                                                                                    }`}
+                                                                                >
+                                                                                    <Sparkles className="w-3 h-3" /> Remove BG
+                                                                                </button>
+                                                                            )}
+
+                                                                            <button
+                                                                                onClick={() => setImages(prev => ({ ...prev, [placeholder.key]: null }))}
+                                                                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+                                                                                title="Remove image"
+                                                                            >
+                                                                                <X className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* AI BG Removal Mode Popover */}
+                                                            {showBgMenu === placeholder.key && !removingBgKeys.has(placeholder.key) && (
+                                                                <div className="flex flex-col gap-2 p-2.5 bg-indigo-50 border border-indigo-150 rounded-xl select-none" onClick={(e) => e.stopPropagation()}>
+                                                                    <span className="text-[9px] font-bold text-indigo-700 uppercase tracking-wider text-center">Detect Subject Type</span>
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            disabled={subscription?.isFreeUser && freeBgRemovalsRemaining !== null && freeBgRemovalsRemaining <= 0}
+                                                                            onClick={() => {
+                                                                                handleRemoveBg(placeholder.key, "people");
+                                                                                setShowBgMenu(null);
+                                                                            }}
+                                                                            className="flex-1 py-1.5 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-all"
+                                                                        >
+                                                                            People
+                                                                        </button>
+                                                                        <button
+                                                                            disabled={subscription?.isFreeUser && freeBgRemovalsRemaining !== null && freeBgRemovalsRemaining <= 0}
+                                                                            onClick={() => {
+                                                                                handleRemoveBg(placeholder.key, "logo");
+                                                                                setShowBgMenu(null);
+                                                                            }}
+                                                                            className="flex-1 py-1.5 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-all"
+                                                                        >
+                                                                            Object/Logo
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setShowBgMenu(null)}
+                                                                            className="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 text-[10px] rounded-lg"
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Text Placeholders Section */}
+                                        {filteredTexts.length > 0 && (
+                                            <div className="flex flex-col gap-3">
+                                                {sidebarFilter === "all" && (
+                                                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 mt-2">
+                                                        <Type className="w-3.5 h-3.5 text-blue-500" />
+                                                        <span>Texts ({filteredTexts.length})</span>
+                                                    </div>
+                                                )}
+
+                                                {filteredTexts.map((placeholder) => {
+                                                    const isSelected = activePlaceholder === placeholder.key;
+                                                    const textVal = texts[placeholder.key] ?? "";
+
+                                                    return (
+                                                        <div
+                                                            key={placeholder.key}
+                                                            ref={(el) => { sidebarItemRefs.current[placeholder.key] = el; }}
+                                                            onClick={() => {
+                                                                setActivePlaceholder(placeholder.key);
+                                                                seekTo(placeholder.previewTimestamp ?? 0);
+                                                            }}
+                                                            className={`group/card relative bg-white rounded-2xl border transition-all duration-300 p-4 shadow-sm flex flex-col gap-2.5 cursor-pointer ${
+                                                                isSelected
+                                                                    ? "border-indigo-500 ring-2 ring-indigo-500 shadow-[0_0_22px_rgba(99,102,241,0.35)] bg-gradient-to-b from-blue-50/40 via-white to-white animate-pulse"
+                                                                    : "border-slate-200 hover:border-slate-300 hover:shadow-md"
+                                                            }`}
+                                                        >
+                                                            {/* Card Header */}
+                                                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <div className={`p-1.5 rounded-lg border ${
+                                                                        isSelected ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-650 border-blue-150"
+                                                                    }`}>
+                                                                        <Type className="w-3.5 h-3.5" />
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <h4 className="text-xs font-bold text-slate-900 truncate leading-tight">{placeholder.label}</h4>
+                                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                                            <span className="text-[9px] font-mono text-slate-400">
+                                                                                {textVal.length} chars
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    seekTo(placeholder.previewTimestamp ?? 0);
+                                                                                }}
+                                                                                className="text-[9px] font-mono text-slate-500 hover:text-blue-650 bg-slate-100 hover:bg-blue-50 px-1.5 py-0.2 rounded border border-slate-200/60 flex items-center gap-0.5 transition-colors"
+                                                                                title="Click to seek timeline to this text"
+                                                                            >
+                                                                                <Clock className="w-2.5 h-2.5" /> {(placeholder.previewTimestamp ?? 0).toFixed(1)}s
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                {isSelected && (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-sm">
+                                                                        Active
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Text Input Area */}
+                                                            <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                                                <textarea
+                                                                    rows={2}
+                                                                    value={textVal}
+                                                                    onFocus={() => {
+                                                                        setActivePlaceholder(placeholder.key);
+                                                                        seekTo(placeholder.previewTimestamp ?? 0);
+                                                                    }}
+                                                                    onChange={(e) => setTexts(prev => ({ ...prev, [placeholder.key]: e.target.value }))}
+                                                                    placeholder={placeholder.defaultValue || `Enter ${placeholder.label}...`}
+                                                                    className="w-full bg-slate-50 border border-slate-200 hover:border-slate-350 focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-none transition-all placeholder:text-slate-400 resize-none"
+                                                                />
+
+                                                                {placeholder.defaultValue && (
+                                                                    <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
+                                                                        <span className="truncate max-w-[190px]">Default: &quot;{placeholder.defaultValue}&quot;</span>
+                                                                        <button
+                                                                            onClick={() => setTexts(prev => ({ ...prev, [placeholder.key]: placeholder.defaultValue }))}
+                                                                            className="text-blue-600 hover:text-blue-800 font-semibold hover:underline"
+                                                                        >
+                                                                            Reset
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </div>
                     </aside>
                 </div>
             </div>

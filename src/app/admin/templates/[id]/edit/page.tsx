@@ -1,3 +1,4 @@
+// agent-notes: { ctx: "Admin template editor page", deps: ["src/lib/supabase.ts", "src/app/api/admin/templates/[id]/route.ts", "src/app/api/admin/upload/route.ts"], state: active, last: "sato@2026-08-24" }
 "use client";
 
 import React, { use, useEffect, useState, ChangeEvent } from "react";
@@ -320,10 +321,11 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
 
             if (!res.ok) throw new Error("Failed to update template");
 
-            router.push("/admin");
+            toast.success("Template updated successfully");
+            router.push("/admin/templates");
         } catch (error) {
             console.error("Error:", error);
-            alert(`Error: ${error}`);
+            toast.error(`Error: ${error instanceof Error ? error.message : error}`);
         } finally {
             setIsSubmitting(false);
             setUploadProgress("");

@@ -1,6 +1,8 @@
+// agent-notes: { ctx: "Render API with multi-subscription credit checking and gift stacking", deps: ["src/lib/supabase-admin.ts", "src/lib/render-processor.ts", "src/lib/subscription-credits.ts"], state: active, last: "sato@2026-08-24" }
 import { NextRequest, NextResponse } from "next/server";
 import { checkSupabaseConfig, supabaseAdmin, getAuthenticatedUser } from "@/lib/supabase-admin";
 import { processRenderJob } from "@/lib/render-processor";
+import { aggregateActiveSubscriptions, pickSubscriptionForRender } from "@/lib/subscription-credits";
 
 
 export const dynamic = "force-dynamic";
@@ -65,51 +67,28 @@ export async function POST(request: NextRequest) {
 
         console.log("Step 2: Checking subscription...");
 
-        // First: try a valid non-expired active subscription
+        const cost = template.credit_cost || 20;
+
+        // First: query all valid non-expired active subscriptions
         const now = new Date().toISOString();
-        const { data: activeSub } = await supabaseAdmin
+        const { data: activeSubs } = await supabaseAdmin
             .from("user_subscriptions")
             .select(`*, plan:subscription_plans(*)`)
             .eq("user_id", userId)
             .eq("status", "active")
             .gte("valid_until", now)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+            .order("created_at", { ascending: false });
 
-        // Second: if no active sub, check for expired subscription with remaining credits
-        let subscription: any = activeSub;
+        const aggregated = aggregateActiveSubscriptions(activeSubs || []);
+        let selectedSubscription: any = null;
         let isExpired = false;
 
-        if (!activeSub) {
-            const { data: expiredSub } = await supabaseAdmin
-                .from("user_subscriptions")
-                .select(`*, plan:subscription_plans(*)`)
-                .eq("user_id", userId)
-                .in("status", ["active", "expired", "cancelled"])
-                .lt("valid_until", now)
-                .order("created_at", { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-            if (expiredSub) {
-                const expiredPlan = expiredSub.plan as any;
-                const cost = template.credit_cost || 20;
-                // Only allow if credits remain
-                if (!expiredPlan.render_limit || (expiredSub.renders_used + cost) <= expiredPlan.render_limit) {
-                    subscription = expiredSub;
-                    isExpired = true;
-                }
-            }
-        }
-
-        const cost = template.credit_cost || 20;
-
-        if (subscription) {
-            const plan = subscription.plan as any;
+        if (aggregated.hasSubscription && activeSubs && activeSubs.length > 0) {
+            const picked = pickSubscriptionForRender(activeSubs, cost);
+            selectedSubscription = picked?.subscription || activeSubs[0];
 
             let activeCost = 0;
-            if (plan.render_limit) {
+            if (aggregated.totalRenderLimit !== null) {
                 const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
                 const { data: activeJobs } = await supabaseAdmin
                     .from("render_jobs")
@@ -124,22 +103,42 @@ export async function POST(request: NextRequest) {
                 ) || 0;
             }
 
-            // Check render limit (for non-expired subs — expired already checked above)
-            if (!isExpired && plan.render_limit && (subscription.renders_used + activeCost + cost) > plan.render_limit) {
-                const available = Math.max(0, plan.render_limit - subscription.renders_used - activeCost);
+            // Check render limit across all aggregated subscriptions
+            if (aggregated.totalRenderLimit !== null && (aggregated.totalRendersUsed + activeCost + cost) > aggregated.totalRenderLimit) {
+                const available = Math.max(0, (aggregated.totalRendersRemaining || 0) - activeCost);
                 return NextResponse.json(
                     { error: `Insufficient credits. This template costs ${cost} credits, but you only have ${available} available (${activeCost > 0 ? `${activeCost} reserved by active renders` : "none in flight"}).` },
                     { status: 403 }
                 );
             } else {
-                console.log(`Subscription verified (expired: ${isExpired}). Credits: ${subscription.renders_used}+${activeCost} in-flight/${plan.render_limit || "unlimited"}. Cost: ${cost}. Credit deducted only on success.`);
+                console.log(`Aggregated subscriptions verified. Total credits: ${aggregated.totalRendersUsed}+${activeCost} in-flight/${aggregated.totalRenderLimit || "unlimited"}. Cost: ${cost}. Deducting from sub ${selectedSubscription.id}.`);
             }
         } else {
-            // No subscription at all
-            return NextResponse.json(
-                { error: "No active subscription. Please subscribe to render HD videos." },
-                { status: 402 }
-            );
+            // Check for expired subscription with remaining credits
+            const { data: expiredSub } = await supabaseAdmin
+                .from("user_subscriptions")
+                .select(`*, plan:subscription_plans(*)`)
+                .eq("user_id", userId)
+                .in("status", ["active", "expired", "cancelled"])
+                .lt("valid_until", now)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (expiredSub) {
+                const expiredPlan = expiredSub.plan as any;
+                if (!expiredPlan?.render_limit || (expiredSub.renders_used + cost) <= expiredPlan.render_limit) {
+                    selectedSubscription = expiredSub;
+                    isExpired = true;
+                }
+            }
+
+            if (!selectedSubscription) {
+                return NextResponse.json(
+                    { error: "No active subscription. Please subscribe to render HD videos." },
+                    { status: 402 }
+                );
+            }
         }
 
         // ── Idempotency guard: prevent duplicate renders on refresh ──────────
@@ -192,7 +191,7 @@ export async function POST(request: NextRequest) {
                 status: "processing",
                 started_at: new Date().toISOString(),
                 parameters: cleanedParameters,
-                subscription_id: subscription?.id || null,
+                subscription_id: selectedSubscription?.id || null,
                 entitlement_id: null,
             })
             .select()

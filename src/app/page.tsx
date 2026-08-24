@@ -24,8 +24,8 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-white">
       <Hero />
-      <HowItWorks />
       <TemplateListing />
+      <HowItWorks />
       <VideoShowcase />
 
       {/* Advanced SEO Content Block */}

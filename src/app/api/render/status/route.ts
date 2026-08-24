@@ -325,7 +325,7 @@ export async function GET(request: NextRequest) {
                             .eq("id", job.user_id)
                             .single();
                         if (profile) {
-                            const newRemaining = Math.max(0, (profile.free_previews_remaining ?? 3) - 1);
+                            const newRemaining = Math.max(0, (profile.free_previews_remaining ?? 10) - 1);
                             await supabaseAdmin
                                 .from("profiles")
                                 .update({ free_previews_remaining: newRemaining })

@@ -87,6 +87,8 @@ export const metadata: Metadata = {
   },
 };
 
+import ScratchCardGiftModal from "@/components/ScratchCardGiftModal";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -121,6 +123,7 @@ export default function RootLayout({
         <LayoutClient>
           {children}
         </LayoutClient>
+        <ScratchCardGiftModal />
         <Toaster position="bottom-right" richColors />
       </body>
     </html>

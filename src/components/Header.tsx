@@ -1,7 +1,8 @@
+// agent-notes: { ctx: "Main navigation header component", deps: ["src/lib/supabase.ts", "src/components/Notifications.tsx"], state: active, last: "sato@2026-08-24" }
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Video, Menu, X, LogOut, User, Bell, Zap } from "lucide-react";
+import { Video, Menu, X, LogOut, User, Bell, Zap, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
@@ -87,15 +88,17 @@ const Header = () => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-4">
-        <nav className="flex items-center justify-between bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-[0_4px_30px_rgba(0,0,0,0.03)] rounded-2xl px-6 py-4">
-          <Link href="/" className="flex items-center gap-2">
-            <img
-              src="/logo.png"
-              alt="CelitePro Logo"
-              className="w-10 h-10 object-contain"
-            />
-            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-500">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-3 sm:mt-4">
+        <nav className="flex items-center justify-between bg-white/85 backdrop-blur-2xl border border-slate-200/80 shadow-[0_8px_30px_rgba(79,70,229,0.06)] rounded-2xl px-5 sm:px-6 py-3.5 sm:py-4 transition-all">
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="relative p-1 rounded-xl bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-rose-500/10 border border-indigo-100 group-hover:border-indigo-300 transition-all">
+              <img
+                src="/logo.png"
+                alt="CelitePro Logo"
+                className="w-8 h-8 sm:w-9 sm:h-9 object-contain group-hover:scale-105 transition-transform"
+              />
+            </div>
+            <span className="text-xl sm:text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-rose-500 tracking-tight">
               CelitePro
             </span>
           </Link>

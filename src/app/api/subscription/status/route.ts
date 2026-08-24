@@ -1,11 +1,14 @@
+// agent-notes: { ctx: "API route for subscription status with multi-subscription credit aggregation", deps: ["src/lib/supabase-admin.ts", "src/lib/subscription-credits.ts"], state: active, last: "sato@2026-08-24" }
 import { NextRequest, NextResponse } from "next/server";
 import { checkSupabaseConfig, supabaseAdmin, getOrResetFreePreviews, getOrResetFreeBgRemovals, getAuthenticatedUser } from "@/lib/supabase-admin";
+import { aggregateActiveSubscriptions } from "@/lib/subscription-credits";
+import { DEFAULT_FREE_PREVIEWS_LIMIT, calculateFreePreviewsStatus } from "@/lib/free-previews";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/subscription/status
- * Returns current user's subscription status
+ * Returns current user's subscription status and aggregated render credits
  */
 export async function GET(request: NextRequest) {
     checkSupabaseConfig();
@@ -15,20 +18,19 @@ export async function GET(request: NextRequest) {
     const { userId } = authResult;
 
     try {
-
-        // Get subscription — first try active non-expired
+        // Get all active non-expired subscriptions for the user
         const now = new Date().toISOString();
-        const { data: subscription, error } = await supabaseAdmin
+        const { data: activeSubs, error } = await supabaseAdmin
             .from("user_subscriptions")
             .select(`*, plan:subscription_plans(*)`)
             .eq("user_id", userId)
             .eq("status", "active")
             .gte("valid_until", now)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+            .order("created_at", { ascending: false });
 
-        // Calculate storage usage dynamically from file_assets tracking table for 100% accuracy (reflects deletions)
+        const aggregated = aggregateActiveSubscriptions(activeSubs || []);
+
+        // Calculate storage usage dynamically from file_assets tracking table
         const { data: userFiles } = await supabaseAdmin
             .from("file_assets")
             .select("size_bytes")
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
 
         // If no active subscription, check for expired one with remaining credits
         let expiredCredits: { remaining: number; planName: string } | null = null;
-        if (error || !subscription) {
+        if (error || !aggregated.hasSubscription) {
             const { data: expiredSub } = await supabaseAdmin
                 .from("user_subscriptions")
                 .select(`renders_used, plan:subscription_plans(name, render_limit)`)
@@ -56,10 +58,9 @@ export async function GET(request: NextRequest) {
                 const p = expiredSub.plan as any;
                 const isUnlimited = !p?.render_limit;
                 const remaining = isUnlimited ? null : Math.max(0, p.render_limit - expiredSub.renders_used);
-                // Only show expired credits if plan was unlimited OR some credits remain
                 if (isUnlimited || (remaining !== null && remaining > 0)) {
                     expiredCredits = {
-                        remaining: remaining ?? 9999, // 9999 = sentinel for unlimited
+                        remaining: remaining ?? 9999,
                         planName: p?.name || "Previous Plan",
                         isUnlimited,
                     } as any;
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        // ── Fetch active one-time render entitlements ────────────────────
+        // Fetch active one-time render entitlements
         const { data: activeEntitlements } = await supabaseAdmin
             .from("user_template_entitlements")
             .select("id, template_id, credits_remaining, status, created_at")
@@ -83,18 +84,14 @@ export async function GET(request: NextRequest) {
         }));
         const hasEntitlement = templateEntitlements.length > 0;
 
-        if (error || !subscription) {
-            // Get or reset free previews dynamically from profiles
+        if (error || !aggregated.hasSubscription) {
+            // Free user tier
             const profile = await getOrResetFreePreviews(userId);
-            const remaining = profile?.free_previews_remaining ?? 3;
-            const previewsUsed = Math.max(0, 3 - remaining);
-            const previewLimit = 3;
-            const previewPercent = (previewsUsed / previewLimit) * 100;
+            const previewStatus = calculateFreePreviewsStatus(profile?.free_previews_remaining, DEFAULT_FREE_PREVIEWS_LIMIT);
             const storageUsedGb = storageUsedBytes / (1024 * 1024 * 1024);
             const storageLimitGb = 1;
             const storagePercent = (storageUsedGb / storageLimitGb) * 100;
 
-            // Get or reset free background removals
             const bgProfile = await getOrResetFreeBgRemovals(userId);
             const freeBgRemovalsRemaining = bgProfile?.free_bg_removals_remaining ?? 3;
 
@@ -114,9 +111,9 @@ export async function GET(request: NextRequest) {
                     storageUsedBytes,
                     storageUsedGb: storageUsedGb.toFixed(2),
                     storagePercent: storagePercent.toFixed(1),
-                    previewsUsed,
-                    previewLimit,
-                    previewPercent: previewPercent.toFixed(1),
+                    previewsUsed: previewStatus.previewsUsed,
+                    previewLimit: previewStatus.previewLimit,
+                    previewPercent: previewStatus.previewPercent,
                 },
                 plan: {
                     name: "Free",
@@ -126,53 +123,88 @@ export async function GET(request: NextRequest) {
                 warnings: {
                     storageNearLimit: storagePercent >= 90,
                     storageAtLimit: storagePercent >= 100,
-                    previewsNearLimit: previewPercent >= 80,
-                    previewsExhausted: previewPercent >= 100,
+                    rendersExhausted: false,
+                    autopayIssue: false,
+                    subscriptionExpired: !!expiredCredits,
+                    previewsNearLimit: previewStatus.previewsNearLimit,
+                    previewsExhausted: previewStatus.previewsExhausted,
                 },
             });
         }
 
-        const plan = subscription.plan as any;
+        const primarySub = aggregated.primarySubscription!;
+        const plan = aggregated.primaryPlan!;
+        const storageLimitGb = aggregated.maxStorageLimitGb;
         const storageUsedGb = storageUsedBytes / (1024 * 1024 * 1024);
-        const storagePercent = (storageUsedGb / plan.storage_limit_gb) * 100;
-        const rendersRemaining = plan.render_limit ? Math.max(0, plan.render_limit - subscription.renders_used) : null;
+        const storagePercent = (storageUsedGb / storageLimitGb) * 100;
+        const rendersRemaining = aggregated.totalRendersRemaining;
+        const isPaidSubscriber = aggregated.hasPaidSubscription;
+
+        let previewsUsed: number | null = null;
+        let previewLimit: number | null = null;
+        let previewPercent = "0";
+        let previewsExhausted = false;
+        let previewsNearLimit = false;
+        let freeBgRemovalsRemaining: number | null = null;
+
+        // If user is not a paid subscriber (e.g. only has Welcome Gift), enforce free preview & BG removal limits
+        if (!isPaidSubscriber) {
+            const profile = await getOrResetFreePreviews(userId);
+            const previewStatus = calculateFreePreviewsStatus(profile?.free_previews_remaining, DEFAULT_FREE_PREVIEWS_LIMIT);
+            previewsUsed = previewStatus.previewsUsed;
+            previewLimit = previewStatus.previewLimit;
+            previewPercent = previewStatus.previewPercent;
+            previewsNearLimit = previewStatus.previewsNearLimit;
+            previewsExhausted = previewStatus.previewsExhausted;
+
+            const bgProfile = await getOrResetFreeBgRemovals(userId);
+            freeBgRemovalsRemaining = bgProfile?.free_bg_removals_remaining ?? 3;
+        }
 
         return NextResponse.json({
             hasSubscription: true,
-            isFreeUser: false,
+            hasPaidSubscription: isPaidSubscriber,
+            isWelcomeGiftOnly: aggregated.isWelcomeGiftOnly,
+            hasUnlimitedPreviews: aggregated.hasUnlimitedPreviews,
+            isFreeUser: !isPaidSubscriber,
             isExpired: false,
             hasExpiredCredits: false,
             expiredCredits: null,
             hasEntitlement,
             templateEntitlements,
+            hasGiftCredits: aggregated.hasGiftCredits,
+            giftCreditsRemaining: aggregated.giftCreditsRemaining,
+            freeBgRemovalsRemaining,
             subscription: {
-                id: subscription.id,
-                status: subscription.status,
-                autopayStatus: subscription.autopay_status,
-                validFrom: subscription.valid_from,
-                validUntil: subscription.valid_until,
-                rendersUsed: subscription.renders_used,
+                id: primarySub.id,
+                status: primarySub.status,
+                autopayStatus: primarySub.autopay_status,
+                validFrom: primarySub.valid_from,
+                validUntil: primarySub.valid_until,
+                rendersUsed: aggregated.totalRendersUsed,
                 rendersRemaining,
                 storageUsedBytes,
                 storageUsedGb: storageUsedGb.toFixed(2),
                 storagePercent: storagePercent.toFixed(1),
-                previewsUsed: null,
-                previewLimit: null,
-                previewPercent: 0,
+                previewsUsed,
+                previewLimit,
+                previewPercent,
             },
             plan: {
                 id: plan.id,
                 name: plan.name,
                 billingCycle: plan.billing_cycle,
-                renderLimit: plan.render_limit,
-                storageLimitGb: plan.storage_limit_gb,
+                renderLimit: aggregated.totalRenderLimit,
+                storageLimitGb,
             },
             warnings: {
                 storageNearLimit: storagePercent >= 90,
                 storageAtLimit: storagePercent >= 100,
-                rendersExhausted: plan.render_limit && subscription.renders_used >= plan.render_limit,
-                autopayIssue: subscription.autopay_status !== "active",
+                rendersExhausted: aggregated.totalRenderLimit !== null && aggregated.totalRendersUsed >= aggregated.totalRenderLimit,
+                autopayIssue: primarySub.autopay_status !== "active",
                 subscriptionExpired: false,
+                previewsNearLimit,
+                previewsExhausted,
             },
         });
 

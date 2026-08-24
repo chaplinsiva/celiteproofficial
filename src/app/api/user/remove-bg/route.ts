@@ -25,16 +25,16 @@ export async function POST(request: NextRequest) {
 
         if (supabaseAdmin) {
             const nowStr = new Date().toISOString();
-            const { data: sub } = await supabaseAdmin
+            const { data: activeSubs } = await supabaseAdmin
                 .from("user_subscriptions")
-                .select("id")
+                .select("id, plan:subscription_plans(name, price_monthly)")
                 .eq("user_id", userId)
                 .eq("status", "active")
-                .gte("valid_until", nowStr)
-                .limit(1)
-                .maybeSingle();
+                .gte("valid_until", nowStr);
 
-            hasSubscription = !!sub;
+            hasSubscription = (activeSubs || []).some(
+                (s: any) => (s.plan?.price_monthly || 0) > 0 && s.plan?.name !== "Welcome Gift"
+            );
 
             if (!hasSubscription) {
                 const profile = await getOrResetFreeBgRemovals(userId);

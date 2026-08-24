@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, checkSupabaseConfig, verifyAdminRequest } from "@/lib/supabase-admin";
 import { getPresignedDownloadUrl, getR2KeyFromUrl } from "@/lib/r2";
+import { normalizeSubscriptionLogs } from "@/lib/subscription-logs";
 
 export async function GET(request: Request) {
     try {
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
             subscriptionPlansResult,
             paymentsResult,
             entitlementsResult,
+            subscriptionOrdersResult,
         ] = await Promise.all([
             supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }),
             supabaseAdmin.from("projects").select("*", { count: "exact", head: true }),
@@ -63,19 +65,26 @@ export async function GET(request: Request) {
                 .from("user_template_entitlements")
                 .select("*")
                 .order("created_at", { ascending: false }),
+            supabaseAdmin
+                .from("subscription_orders")
+                .select("*")
+                .order("created_at", { ascending: false })
+                .limit(500),
         ]);
 
         const renders = rendersResult.data || [];
         const subscriptions = subscriptionsResult.data || [];
         const entitlements = entitlementsResult.data || [];
         const payments = paymentsResult.data || [];
+        const subscriptionOrders = subscriptionOrdersResult.data || [];
 
-        // Collect all unique user IDs and template IDs from renders, subscriptions, and entitlements
+        // Collect all unique user IDs and template IDs from renders, subscriptions, entitlements, and subscription orders
         const userIds = [
             ...new Set([
                 ...renders.map((r: any) => r.user_id),
                 ...subscriptions.map((s: any) => s.user_id),
-                ...entitlements.map((e: any) => e.user_id)
+                ...entitlements.map((e: any) => e.user_id),
+                ...subscriptionOrders.map((o: any) => o.user_id),
             ].filter(Boolean))
         ];
 
@@ -86,20 +95,55 @@ export async function GET(request: Request) {
             ].filter(Boolean))
         ];
 
-        const [templatesResult, profilesDataResult] = await Promise.all([
+        const [templatesResult, profilesDataResult, authUsersResult] = await Promise.all([
             templateIds.length > 0
                 ? supabaseAdmin.from("templates").select("id, title, thumbnail_url").in("id", templateIds)
                 : { data: [] },
-            userIds.length > 0
-                ? supabaseAdmin.from("profiles").select("id, email").in("id", userIds)
-                : { data: [] },
+            supabaseAdmin.from("profiles").select("id, email, full_name, phone"),
+            supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }).catch(() => ({ data: { users: [] } })),
         ]);
 
         const templatesMap: Record<string, any> = {};
         (templatesResult.data || []).forEach((t: any) => { templatesMap[t.id] = t; });
 
         const profilesMap: Record<string, any> = {};
-        (profilesDataResult.data || []).forEach((p: any) => { profilesMap[p.id] = p; });
+
+        // 1. Populate from Supabase Auth users
+        const authUsers = (authUsersResult as any)?.data?.users || [];
+        authUsers.forEach((u: any) => {
+            if (u.id) {
+                profilesMap[u.id] = {
+                    id: u.id,
+                    email: u.email || "",
+                    full_name: u.user_metadata?.full_name || u.user_metadata?.name || null,
+                    phone: u.phone || u.user_metadata?.phone || null,
+                };
+            }
+        });
+
+        // 2. Populate / merge from profiles table
+        (profilesDataResult.data || []).forEach((p: any) => {
+            if (p.id) {
+                profilesMap[p.id] = {
+                    ...profilesMap[p.id],
+                    ...p,
+                    email: p.email || profilesMap[p.id]?.email || "",
+                };
+            }
+        });
+
+        // 3. Populate / merge from subscription orders
+        subscriptionOrders.forEach((o: any) => {
+            if (o.user_id) {
+                profilesMap[o.user_id] = {
+                    ...profilesMap[o.user_id],
+                    id: o.user_id,
+                    email: o.email || profilesMap[o.user_id]?.email || "",
+                    full_name: o.full_name || profilesMap[o.user_id]?.full_name || null,
+                    phone: o.phone || profilesMap[o.user_id]?.phone || null,
+                };
+            }
+        });
 
         const plansMap: Record<string, any> = {};
         (subscriptionPlansResult.data || []).forEach((p: any) => { plansMap[p.id] = p; });
@@ -115,26 +159,40 @@ export async function GET(request: Request) {
                     console.error(`Failed to generate presigned URL for admin render ${r.id}:`, e);
                 }
             }
+            const profile = profilesMap[r.user_id];
+            const userEmail = profile?.email || (r.user_id ? `user_${r.user_id.slice(0, 8)}` : "Guest");
             return {
                 ...r,
                 output_url: outputUrl,
                 template_title: templatesMap[r.template_id]?.title || "Unknown Template",
                 template_thumbnail: templatesMap[r.template_id]?.thumbnail_url || null,
-                user_email: profilesMap[r.user_id]?.email || "Unknown User",
+                user_email: userEmail,
             };
         }));
 
         // Enrich subscriptions
-        const enrichedSubscriptions = subscriptions.map((s: any) => ({
-            ...s,
-            plan_name: plansMap[s.plan_id]?.name || "Unknown Plan",
-            billing_cycle: plansMap[s.plan_id]?.billing_cycle || "monthly",
-            price_monthly: plansMap[s.plan_id]?.price_monthly || 0,
-            price_total: plansMap[s.plan_id]?.price_total || 0,
-            render_limit: plansMap[s.plan_id]?.render_limit || 0,
-            storage_limit_gb: plansMap[s.plan_id]?.storage_limit_gb || 0,
-            user_email: profilesMap[s.user_id]?.email || "Unknown User",
-        }));
+        const enrichedSubscriptions = subscriptions.map((s: any) => {
+            const profile = profilesMap[s.user_id];
+            const userEmail = profile?.email || (s.user_id ? `user_${s.user_id.slice(0, 8)}` : "Customer");
+            return {
+                ...s,
+                plan_name: plansMap[s.plan_id]?.name || "Unknown Plan",
+                billing_cycle: plansMap[s.plan_id]?.billing_cycle || "monthly",
+                price_monthly: plansMap[s.plan_id]?.price_monthly || 0,
+                price_total: plansMap[s.plan_id]?.price_total || 0,
+                render_limit: plansMap[s.plan_id]?.render_limit || 0,
+                storage_limit_gb: plansMap[s.plan_id]?.storage_limit_gb || 0,
+                user_email: userEmail,
+            };
+        });
+
+        // Generate comprehensive subscription audit logs
+        const subscriptionLogs = normalizeSubscriptionLogs(
+            subscriptionOrders,
+            subscriptions,
+            plansMap,
+            profilesMap
+        );
 
         // Map payments by ID and Razorpay Order ID for robust lookups
         const paymentsMapById: Record<string, any> = {};
@@ -148,10 +206,12 @@ export async function GET(request: Request) {
         const enrichedEntitlements = entitlements.map((e: any) => {
             const payment = (e.payment_id ? paymentsMapById[e.payment_id] : null) || 
                             (e.razorpay_order_id ? paymentsMapByOrderId[e.razorpay_order_id] : null);
+            const profile = profilesMap[e.user_id];
+            const userEmail = profile?.email || (e.user_id ? `user_${e.user_id.slice(0, 8)}` : "Customer");
             return {
                 ...e,
                 template_title: templatesMap[e.template_id]?.title || "Unknown Template",
-                user_email: profilesMap[e.user_id]?.email || "Unknown User",
+                user_email: userEmail,
                 amount: payment ? payment.amount : 10000, // Default to ₹100 if payment not found
                 currency: payment ? payment.currency : "INR",
                 payment_status: payment ? payment.status : (e.status === "active" || e.status === "exhausted" ? "paid" : "unknown"),
@@ -191,6 +251,8 @@ export async function GET(request: Request) {
             },
             renders: enrichedRenders,
             subscriptions: enrichedSubscriptions,
+            subscriptionLogs,
+            subscriptionOrders,
             oneTimePurchases: deduplicatedEntitlements,
             plans: subscriptionPlansResult.data || [],
             payments: paymentsResult.data || [],
