@@ -1,0 +1,20 @@
+{
+  "done-gate": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "\"$ANTIGRAVITY_PROJECT_DIR\"/.agents/hooks/done-gate.sh",
+        "timeout": 120
+      }
+    ]
+  },
+  "teammate-idle": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "\"$ANTIGRAVITY_PROJECT_DIR\"/.agents/hooks/teammate-idle.sh",
+        "timeout": 30
+      }
+    ]
+  }
+}

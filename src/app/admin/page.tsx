@@ -1,3 +1,4 @@
+// agent-notes: { ctx: "Admin dashboard page with comprehensive subscription logs, renders, and analytics", deps: ["src/lib/supabase.ts", "src/lib/subscription-logs.ts"], state: active, last: "sato@2026-08-24" }
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -10,14 +11,15 @@ import {
     Layout, Video, Users, BarChart3, ArrowLeft, Clock, CheckCircle2, AlertCircle,
     RefreshCw, ShieldCheck, ExternalLink, Settings, Globe, Play, X,
     CreditCard, Crown, Calendar, Zap, Download, Eye, XCircle, TrendingUp, ChevronDown,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, FileText, Gift, Search, Copy, Check, Filter
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { SubscriptionLogEntry, filterSubscriptionLogs } from "@/lib/subscription-logs";
 
 interface RenderJob {
-    id: string; status: string; output_url: string | null; thumbnail_urls: string[] | null;
+    id: string; user_id?: string; status: string; output_url: string | null; thumbnail_urls: string[] | null;
     created_at: string; updated_at: string; is_sample: boolean; is_single_pay: boolean;
     template_title: string; template_thumbnail: string | null; user_email: string; error_message?: string;
 }
@@ -37,7 +39,10 @@ interface DashboardData {
         totalUsers: number; totalProjects: number; totalRenders: number; completedRenders: number; failedRenders: number;
         activeSubscriptions: number; subscribedUsers: number; oneTimePurchasesCount: number; oneTimeEarnings: number;
     };
-    renders: RenderJob[]; subscriptions: Subscription[]; oneTimePurchases: OneTimePurchase[];
+    renders: RenderJob[];
+    subscriptions: Subscription[];
+    subscriptionLogs?: SubscriptionLogEntry[];
+    oneTimePurchases: OneTimePurchase[];
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -80,7 +85,7 @@ export default function AdminDashboard() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [data, setData] = useState<DashboardData | null>(null);
     const [playingVideo, setPlayingVideo] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<"renders" | "subscriptions" | "oneTime">("renders");
+    const [activeTab, setActiveTab] = useState<"renders" | "subscriptions" | "subscriptionLogs" | "oneTime">("renders");
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [hdPage, setHdPage] = useState<number>(1);
     const [hdShowAll, setHdShowAll] = useState<boolean>(false);
@@ -88,6 +93,14 @@ export default function AdminDashboard() {
     const [freeShowAll, setFreeShowAll] = useState<boolean>(false);
     const [graphMetric, setGraphMetric] = useState<"earnings" | "count">("earnings");
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+    // Subscription Logs State
+    const [subLogSearch, setSubLogSearch] = useState<string>("");
+    const [subLogStatus, setSubLogStatus] = useState<string>("all");
+    const [subLogPlan, setSubLogPlan] = useState<string>("all");
+    const [subLogPage, setSubLogPage] = useState<number>(1);
+    const [subLogShowAll, setSubLogShowAll] = useState<boolean>(false);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
     const router = useRouter();
 
     // Prepare chart data for one-time purchases over the last 30 days
@@ -224,7 +237,7 @@ export default function AdminDashboard() {
                 {/* Info */}
                 <div className="p-4">
                     <h3 className="text-sm font-bold text-white truncate mb-1">{render.template_title}</h3>
-                    <p className="text-[11px] text-gray-500 truncate mb-3">{render.user_email}</p>
+                    <p className="text-[11px] text-gray-500 truncate mb-3">{render.user_email && render.user_email !== "Unknown User" ? render.user_email : `user_${render.user_id?.slice(0, 8)}`}</p>
                     <div className="flex items-center justify-between">
                         <span className="text-[10px] text-gray-600">{formatDate(render.created_at)}</span>
                         <div className="flex items-center gap-1.5">
@@ -312,11 +325,19 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex items-center gap-1 mb-6 bg-white/[0.02] border border-white/5 rounded-xl p-1 w-fit">
-                    {(["renders", "subscriptions", "oneTime"] as const).map(tab => (
+                <div className="flex items-center gap-1 mb-6 bg-white/[0.02] border border-white/5 rounded-xl p-1 w-fit flex-wrap">
+                    {(["renders", "subscriptions", "subscriptionLogs", "oneTime"] as const).map(tab => (
                         <button key={tab} onClick={() => setActiveTab(tab)}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all capitalize ${activeTab === tab ? "bg-indigo-500 text-white" : "text-gray-500 hover:text-gray-300"}`}>
-                            {tab === "renders" ? <><Video className="w-4 h-4 inline mr-1.5" />Total Renders</> : tab === "subscriptions" ? <><Crown className="w-4 h-4 inline mr-1.5" />Subscriptions</> : <><CreditCard className="w-4 h-4 inline mr-1.5" />One-Time Purchases</>}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all capitalize ${activeTab === tab ? "bg-indigo-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-300"}`}>
+                            {tab === "renders" ? (
+                                <><Video className="w-4 h-4 inline mr-1.5" />Total Renders</>
+                            ) : tab === "subscriptions" ? (
+                                <><Crown className="w-4 h-4 inline mr-1.5" />Active Subscriptions</>
+                            ) : tab === "subscriptionLogs" ? (
+                                <><FileText className="w-4 h-4 inline mr-1.5" />Subscription Logs</>
+                            ) : (
+                                <><CreditCard className="w-4 h-4 inline mr-1.5" />One-Time Purchases</>
+                            )}
                         </button>
                     ))}
                 </div>
@@ -579,7 +600,7 @@ export default function AdminDashboard() {
                                             return (
                                                 <tr key={sub.id} className="hover:bg-white/[0.01] transition-colors">
                                                     <td className="px-5 py-4">
-                                                        <span className="text-sm font-semibold text-white">{sub.user_email}</span>
+                                                        <span className="text-sm font-semibold text-white">{sub.user_email && sub.user_email !== "Unknown User" ? sub.user_email : `user_${sub.user_id?.slice(0, 8)}`}</span>
                                                     </td>
                                                     <td className="px-5 py-4">
                                                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
@@ -634,6 +655,308 @@ export default function AdminDashboard() {
                         </div>
                     </div>
                 )}
+
+                {/* Subscription Logs Tab */}
+                {activeTab === "subscriptionLogs" && (() => {
+                    const allLogs = data.subscriptionLogs || [];
+                    const filteredLogs = filterSubscriptionLogs(allLogs, {
+                        search: subLogSearch,
+                        status: subLogStatus,
+                        plan: subLogPlan,
+                    });
+
+                    const totalLogEvents = allLogs.length;
+                    const paidEvents = allLogs.filter(l => l.status === "paid" || (l.status === "active" && l.amount > 0)).length;
+                    const giftEvents = allLogs.filter(l => l.sourceType === "gift" || l.status === "gift" || l.planName === "Welcome Gift").length;
+                    const totalSubRevenue = allLogs
+                        .filter(l => l.status === "paid")
+                        .reduce((sum, l) => sum + (l.amount || 0), 0);
+
+                    const ITEMS_PER_PAGE = 15;
+                    const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE) || 1;
+                    const currentPage = Math.min(subLogPage, totalPages);
+                    const visibleLogs = subLogShowAll
+                        ? filteredLogs
+                        : filteredLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+                    const handleCopy = (text: string, id: string) => {
+                        navigator.clipboard.writeText(text);
+                        setCopiedId(id);
+                        toast.success("Copied to clipboard");
+                        setTimeout(() => setCopiedId(null), 2000);
+                    };
+
+                    const uniquePlans = Array.from(new Set(allLogs.map(l => l.planName).filter(Boolean)));
+
+                    return (
+                        <div className="space-y-6">
+                            {/* Summary Metric Cards */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="bg-gradient-to-br from-indigo-500/10 to-blue-500/10 border border-indigo-500/20 rounded-2xl p-5">
+                                    <FileText className="w-5 h-5 text-indigo-400 mb-2" />
+                                    <div className="text-2xl font-bold text-white">{totalLogEvents}</div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mt-1">Total Audit Events</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 rounded-2xl p-5">
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-400 mb-2" />
+                                    <div className="text-2xl font-bold text-white">{paidEvents}</div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mt-1">Paid Subscriptions</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-rose-500/10 to-amber-500/10 border border-rose-500/20 rounded-2xl p-5">
+                                    <Gift className="w-5 h-5 text-rose-400 mb-2" />
+                                    <div className="text-2xl font-bold text-white">{giftEvents}</div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mt-1">10-Credit Welcome Gifts</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-5">
+                                    <Zap className="w-5 h-5 text-amber-400 mb-2" />
+                                    <div className="text-2xl font-bold text-white">{formatPrice(totalSubRevenue)}</div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mt-1">Subscription Revenue</div>
+                                </div>
+                            </div>
+
+                            {/* Search & Filter Controls */}
+                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white/[0.02] border border-white/5 p-4 rounded-2xl">
+                                <div className="relative w-full md:w-80">
+                                    <Search className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search email, order ID, payment ID..."
+                                        value={subLogSearch}
+                                        onChange={(e) => { setSubLogSearch(e.target.value); setSubLogPage(1); }}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500/50"
+                                    />
+                                    {subLogSearch && (
+                                        <button onClick={() => setSubLogSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+                                    {/* Status Filter */}
+                                    <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
+                                        {[
+                                            { id: "all", label: "All" },
+                                            { id: "paid", label: "Paid" },
+                                            { id: "gift", label: "Gifts" },
+                                            { id: "created", label: "Created" },
+                                            { id: "failed", label: "Failed" },
+                                        ].map(f => (
+                                            <button
+                                                key={f.id}
+                                                onClick={() => { setSubLogStatus(f.id); setSubLogPage(1); }}
+                                                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                                                    subLogStatus === f.id ? "bg-indigo-500 text-white" : "text-gray-400 hover:text-white"
+                                                }`}
+                                            >
+                                                {f.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Plan Filter */}
+                                    {uniquePlans.length > 0 && (
+                                        <select
+                                            value={subLogPlan}
+                                            onChange={(e) => { setSubLogPlan(e.target.value); setSubLogPage(1); }}
+                                            className="bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-indigo-500/50"
+                                        >
+                                            <option value="all">All Plans</option>
+                                            {uniquePlans.map(p => (
+                                                <option key={p} value={p}>{p}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Logs Data Table */}
+                            <div className="bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-white/5 bg-white/[0.01]">
+                                                <th className="px-5 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Time</th>
+                                                <th className="px-5 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">User</th>
+                                                <th className="px-5 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Action / Event</th>
+                                                <th className="px-5 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Plan</th>
+                                                <th className="px-5 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Amount</th>
+                                                <th className="px-5 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Order / Payment ID</th>
+                                                <th className="px-5 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {visibleLogs.map((log) => {
+                                                const isGift = log.sourceType === "gift" || log.status === "gift";
+                                                const isPaid = log.status === "paid" || log.status === "active";
+
+                                                return (
+                                                    <tr key={log.id} className="hover:bg-white/[0.01] transition-colors">
+                                                        {/* Timestamp */}
+                                                        <td className="px-5 py-4 whitespace-nowrap text-xs text-gray-400">
+                                                            {formatDate(log.createdAt)}
+                                                        </td>
+
+                                                        {/* User */}
+                                                        <td className="px-5 py-4">
+                                                            <div className="text-sm font-semibold text-white">
+                                                                {log.fullName || log.userEmail}
+                                                            </div>
+                                                            {log.fullName && (
+                                                                <div className="text-xs text-gray-400">{log.userEmail}</div>
+                                                            )}
+                                                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-500 font-mono">
+                                                                {log.phone && <span>📞 {log.phone}</span>}
+                                                                {log.companyName && <span className="text-gray-400">🏢 {log.companyName}</span>}
+                                                            </div>
+                                                            <div className="text-[9px] font-mono text-gray-600 truncate max-w-[140px] mt-0.5">{log.userId}</div>
+                                                        </td>
+
+                                                        {/* Details */}
+                                                        <td className="px-5 py-4 max-w-xs">
+                                                            <div className="flex items-center gap-2">
+                                                                {isGift ? (
+                                                                    <div className="p-1 rounded bg-rose-500/10 text-rose-400 shrink-0"><Gift className="w-3.5 h-3.5" /></div>
+                                                                ) : isPaid ? (
+                                                                    <div className="p-1 rounded bg-emerald-500/10 text-emerald-400 shrink-0"><Check className="w-3.5 h-3.5" /></div>
+                                                                ) : log.status === "failed" ? (
+                                                                    <div className="p-1 rounded bg-red-500/10 text-red-400 shrink-0"><XCircle className="w-3.5 h-3.5" /></div>
+                                                                ) : (
+                                                                    <div className="p-1 rounded bg-blue-500/10 text-blue-400 shrink-0"><Clock className="w-3.5 h-3.5" /></div>
+                                                                )}
+                                                                <span className="text-xs text-gray-300 font-medium">{log.details}</span>
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Plan */}
+                                                        <td className="px-5 py-4 whitespace-nowrap">
+                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                                                                isGift
+                                                                    ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                                                    : log.planName === "Pro"
+                                                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                                                    : log.planName === "Creator"
+                                                                    ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                                                                    : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                                                            }`}>
+                                                                {isGift ? <Gift className="w-3 h-3" /> : <Crown className="w-3 h-3" />}
+                                                                {log.planName}
+                                                            </span>
+                                                            {log.renderLimit > 0 && (
+                                                                <span className="block text-[10px] text-gray-500 mt-0.5">{log.renderLimit} Credits</span>
+                                                            )}
+                                                        </td>
+
+                                                        {/* Amount */}
+                                                        <td className="px-5 py-4 whitespace-nowrap">
+                                                            {isGift || log.amount === 0 ? (
+                                                                <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">FREE GIFT</span>
+                                                            ) : (
+                                                                <span className="text-sm font-bold text-white">
+                                                                    {log.currency === "USD" ? `$${(log.amount / 100).toFixed(2)}` : formatPrice(log.amount)}
+                                                                </span>
+                                                            )}
+                                                        </td>
+
+                                                        {/* Order / Payment ID */}
+                                                        <td className="px-5 py-4 whitespace-nowrap">
+                                                            {log.razorpayOrderId && (
+                                                                <div className="flex items-center gap-1.5 font-mono text-[11px] text-gray-300">
+                                                                    <span className="text-gray-500">Order:</span>
+                                                                    <span className="truncate max-w-[110px]">{log.razorpayOrderId}</span>
+                                                                    <button
+                                                                        onClick={() => handleCopy(log.razorpayOrderId!, `order-${log.id}`)}
+                                                                        className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                                                                        title="Copy Order ID"
+                                                                    >
+                                                                        {copiedId === `order-${log.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                            {log.razorpayPaymentId && (
+                                                                <div className="flex items-center gap-1.5 font-mono text-[11px] text-emerald-400 mt-0.5">
+                                                                    <span className="text-gray-500">Pay:</span>
+                                                                    <span className="truncate max-w-[110px]">{log.razorpayPaymentId}</span>
+                                                                    <button
+                                                                        onClick={() => handleCopy(log.razorpayPaymentId!, `pay-${log.id}`)}
+                                                                        className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                                                                        title="Copy Payment ID"
+                                                                    >
+                                                                        {copiedId === `pay-${log.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                            {!log.razorpayOrderId && !log.razorpayPaymentId && (
+                                                                <span className="text-xs text-gray-600">—</span>
+                                                            )}
+                                                        </td>
+
+                                                        {/* Status */}
+                                                        <td className="px-5 py-4 whitespace-nowrap">
+                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                                                                isGift
+                                                                    ? "text-rose-400 bg-rose-500/10 border-rose-500/20"
+                                                                    : log.status === "paid" || log.status === "completed" || log.status === "active"
+                                                                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                                                                    : log.status === "created" || log.status === "initialized"
+                                                                    ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
+                                                                    : "text-red-400 bg-red-500/10 border-red-500/20"
+                                                            }`}>
+                                                                {isGift ? <Gift className="w-3 h-3" /> : (log.status === "paid" || log.status === "completed" || log.status === "active") ? <CheckCircle2 className="w-3 h-3" /> : log.status === "failed" ? <XCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                                                {isGift ? "Gift Granted" : log.status}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {filteredLogs.length === 0 && (
+                                    <div className="text-center py-16 text-gray-600">
+                                        <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                                        <p className="text-sm">No subscription logs matching criteria.</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Pagination */}
+                            {filteredLogs.length > ITEMS_PER_PAGE && (
+                                <div className="flex items-center justify-between gap-4 bg-white/[0.01] border border-white/5 p-3 rounded-2xl">
+                                    <button
+                                        onClick={() => setSubLogShowAll(prev => !prev)}
+                                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border bg-white/5 text-gray-400 border-white/10 hover:text-white"
+                                    >
+                                        {subLogShowAll ? "Paginate (15 per page)" : `Show All (${filteredLogs.length})`}
+                                    </button>
+
+                                    {!subLogShowAll && totalPages > 1 && (
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                disabled={subLogPage === 1}
+                                                onClick={() => setSubLogPage(p => Math.max(1, p - 1))}
+                                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                                            >
+                                                <ChevronLeft className="w-4 h-4" />
+                                            </button>
+                                            <span className="text-xs text-gray-400 font-medium">
+                                                Page {currentPage} of {totalPages}
+                                            </span>
+                                            <button
+                                                disabled={subLogPage === totalPages}
+                                                onClick={() => setSubLogPage(p => Math.min(totalPages, p + 1))}
+                                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                                            >
+                                                <ChevronRight className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {/* One-Time Purchases Tab */}
                 {activeTab === "oneTime" && (
@@ -811,7 +1134,7 @@ export default function AdminDashboard() {
                                             return (
                                                 <tr key={purchase.id} className="hover:bg-white/[0.01] transition-colors">
                                                     <td className="px-5 py-4">
-                                                        <span className="text-sm font-semibold text-white">{purchase.user_email}</span>
+                                                        <span className="text-sm font-semibold text-white">{purchase.user_email && purchase.user_email !== "Unknown User" ? purchase.user_email : `user_${purchase.user_id?.slice(0, 8)}`}</span>
                                                     </td>
                                                     <td className="px-5 py-4">
                                                         <span className="text-sm font-semibold text-gray-300">{purchase.template_title}</span>

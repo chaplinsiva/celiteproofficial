@@ -1,3 +1,4 @@
+// agent-notes: { ctx: "Admin new template creation page", deps: ["src/lib/supabase.ts", "src/app/api/admin/templates/route.ts", "src/app/api/admin/upload/route.ts"], state: active, last: "sato@2026-08-24" }
 "use client";
 
 import React, { useState, useEffect, ChangeEvent } from "react";
@@ -245,10 +246,11 @@ export default function NewTemplatePage() {
             }
 
             setUploadProgress("Done!");
-            router.push("/admin");
+            toast.success("Template created successfully");
+            router.push("/admin/templates");
         } catch (error) {
             console.error("Error:", error);
-            alert(`Error: ${error}`);
+            toast.error(`Error: ${error instanceof Error ? error.message : error}`);
         } finally {
             setIsSubmitting(false);
             setUploadProgress("");

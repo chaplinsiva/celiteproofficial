@@ -1,3 +1,4 @@
+// agent-notes: { ctx: "Admin template listing and management page", deps: ["src/lib/supabase.ts", "src/app/api/admin/templates/route.ts"], state: active, last: "sato@2026-08-24" }
 "use client";
 
 import React, { useEffect, useState } from "react";

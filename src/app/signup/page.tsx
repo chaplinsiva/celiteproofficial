@@ -1,9 +1,10 @@
+// agent-notes: { ctx: "Signup page with instant 10 free credits gift scratch teaser", deps: ["src/lib/supabase.ts"], state: active, last: "sato@2026-08-24" }
 "use client";
 
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
-import { Video, Mail, Lock, User, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
+import { Video, Mail, Lock, User, ArrowRight, Loader2, Eye, EyeOff, Gift, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -41,7 +42,7 @@ export default function SignUp() {
         if (error) {
             setError(error.message);
         } else if (data.session) {
-            // Auto-confimed, redirect to intended target
+            // Auto-confirmed, redirect to intended target
             const params = new URLSearchParams(window.location.search);
             const redirectUrl = params.get("redirect") || "/dashboard";
             router.push(redirectUrl);
@@ -84,9 +85,20 @@ export default function SignUp() {
                 className="w-full max-w-md"
             >
                 <div className="bg-slate-50/70 border border-slate-200 shadow-xl backdrop-blur-2xl rounded-3xl p-8 md:p-10 relative overflow-hidden">
+                    {/* Gift Teaser Ribbon */}
+                    <div className="mb-6 p-3 rounded-2xl bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-indigo-500/10 border border-rose-200/80 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500 to-amber-500 flex items-center justify-center text-white shrink-0 shadow-sm animate-pulse">
+                            <Gift className="w-4 h-4" />
+                        </div>
+                        <div className="text-left">
+                            <span className="text-[11px] font-extrabold text-rose-600 uppercase tracking-wider block">🎁 Special Signup Gift</span>
+                            <span className="text-xs font-bold text-slate-800">Scratch & Get 10 Free HD Credits!</span>
+                        </div>
+                    </div>
+
                     {/* Logo */}
-                    <div className="flex flex-col items-center mb-10">
-                        <Link href="/" className="flex items-center gap-2 mb-6">
+                    <div className="flex flex-col items-center mb-8">
+                        <Link href="/" className="flex items-center gap-2 mb-4">
                             <img
                                 src="https://files.celitepro.in/logos/02.png"
                                 alt="CelitePro Logo"
@@ -97,7 +109,7 @@ export default function SignUp() {
                             </span>
                         </Link>
                         <h1 className="text-2xl font-bold text-slate-900 text-center">Create your account</h1>
-                        <p className="text-slate-500 text-center mt-2">Start creating your wedding invitation today.</p>
+                        <p className="text-slate-500 text-center mt-1 text-sm">Start creating stunning wedding video invites today.</p>
                     </div>
 
                     <button

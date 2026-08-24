@@ -1,6 +1,8 @@
+// agent-notes: { ctx: "Admin upload presigned URL generator", deps: ["src/lib/r2.ts", "src/lib/supabase-admin.ts", "src/lib/admin-upload.ts"], state: active, last: "sato@2026-08-24" }
 import { NextRequest, NextResponse } from "next/server";
 import { getPresignedUploadUrl, getPublicUrl } from "@/lib/r2";
 import { verifyAdminRequest } from "@/lib/supabase-admin";
+import { getAdminUploadPath } from "@/lib/admin-upload";
 
 export async function POST(request: NextRequest) {
     try {
@@ -15,17 +17,11 @@ export async function POST(request: NextRequest) {
         }
 
         const results: Record<string, { presignedUrl: string; publicUrl: string }> = {};
+        const timestamp = Date.now();
 
         for (const [key, fileObj] of Object.entries(files)) {
             const typedFileObj = fileObj as { name: string; type: string };
-            const ext = typedFileObj.name.split(".").pop() || "";
-            let path = "";
-
-            if (key === "preview") path = `templates/${slug}/preview.${ext}`;
-            else if (key === "thumbnail") path = `templates/${slug}/thumbnail.${ext}`;
-            else if (key === "source") path = `templates/${slug}/source.zip`;
-            else if (key.startsWith("reference_")) path = `templates/${slug}/references/${key.replace("reference_", "")}.${ext}`;
-            else continue;
+            const path = getAdminUploadPath(slug, key, typedFileObj.name, timestamp);
 
             const presignedUrl = await getPresignedUploadUrl(path, typedFileObj.type);
             const publicUrl = getPublicUrl(path);

@@ -57,27 +57,26 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check subscription — expired users are treated as free users (10 sample limit applies)
-        const subRes = await supabaseAdmin
+        // Check subscription — only PAID subscribers get unlimited sample renders. Welcome Gift users and free users use the free preview limit.
+        const { data: activeSubs } = await supabaseAdmin
             .from("user_subscriptions")
-            .select("id, status, valid_until")
+            .select("id, status, valid_until, plan:subscription_plans(name, price_monthly)")
             .eq("user_id", userId)
             .eq("status", "active")
-            .gte("valid_until", new Date().toISOString())
-            .maybeSingle();
+            .gte("valid_until", new Date().toISOString());
 
-        const hasActiveSubscription = !!subRes.data;
+        const hasPaidSubscription = (activeSubs || []).some(
+            (s: any) => (s.plan?.price_monthly || 0) > 0 && s.plan?.name !== "Welcome Gift"
+        );
 
-        if (!hasActiveSubscription) {
+        if (!hasPaidSubscription) {
             // Get or reset free previews dynamically from profiles
             const profile = await getOrResetFreePreviews(userId);
-            const remainingPreviews = profile?.free_previews_remaining ?? 3;
+            const remainingPreviews = profile?.free_previews_remaining ?? 10;
 
             const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
             // Also count currently-active sampling jobs to prevent race condition
-            // where two simultaneous requests both pass before either logs success.
-            // Exclude jobs older than 15 minutes as they are considered stalled/dead.
             const { data: activeSamples } = await supabaseAdmin
                 .from("render_jobs")
                 .select("id")
@@ -89,7 +88,7 @@ export async function POST(request: NextRequest) {
 
             if (remainingPreviews - activeCount <= 0) {
                 return NextResponse.json(
-                    { error: "Free preview limit reached (10/10). Please subscribe for unlimited previews and HD renders." },
+                    { error: "Free preview limit reached. Please upgrade to a paid subscription for unlimited previews and HD renders." },
                     { status: 403 }
                 );
             }

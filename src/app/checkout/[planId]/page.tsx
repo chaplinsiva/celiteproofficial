@@ -1,3 +1,4 @@
+// agent-notes: { ctx: "Subscription checkout page with Razorpay integration", deps: ["src/lib/supabase.ts", "src/lib/currency.ts", "src/components/CurrencyToggle.tsx", "src/app/api/subscription/create-order/route.ts"], state: active, last: "sato@2026-08-24" }
 "use client";
 
 import React, { useState, useEffect, use } from "react";
@@ -9,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Currency, getSavedCurrency, saveCurrency, formatINR, formatUSD } from "@/lib/currency";
 import CurrencyToggle from "@/components/CurrencyToggle";
+import CheckoutFunnyVibes from "@/components/CheckoutFunnyVibes";
 
 interface Plan {
     id: string;
@@ -190,13 +192,16 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
     return (
         <main className="min-h-screen bg-white text-slate-800 py-12 px-6">
             <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center justify-between mb-6">
                     <Link href="/pricing" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-950 transition-colors group font-medium">
                         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
                         Back to Plans
                     </Link>
                     <CurrencyToggle currency={currency} onChange={handleCurrencyChange} />
                 </div>
+
+                {/* Top Clean Funny/Happy Checkout Vibe */}
+                <CheckoutFunnyVibes isProcessing={processing} />
 
                 <form onSubmit={handlePayment} className="grid lg:grid-cols-2 gap-12">
                     {/* Left: Summary & Form */}
@@ -267,7 +272,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ planId: str
                             </h3>
                             <div className="flex items-center gap-4">
                                 <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                                    {plan.name === "Basic" ? <Zap /> : plan.name === "Business" ? <Sparkles /> : <Crown />}
+                                    {plan.name === "Basic" || plan.name === "Starter" ? <Zap /> : plan.name === "Pro" ? <Crown /> : <Sparkles />}
                                 </div>
                                 <div>
                                     <h3 className="text-xl font-bold text-slate-900">{plan.name} Plan</h3>

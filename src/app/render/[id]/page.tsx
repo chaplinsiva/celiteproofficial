@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import LoadingFunnyVibes from "@/components/LoadingFunnyVibes";
 
 interface RenderStatus {
     status: "pending" | "processing" | "completed" | "failed" | "sampling";
@@ -357,6 +358,9 @@ export default function RenderPage({ params }: { params: Promise<{ id: string }>
                                 <span>Progress</span>
                                 <span className="font-mono text-slate-900 text-sm font-bold">{Math.round(displayProgress)}%</span>
                             </div>
+
+                            {/* Funny Loading GIF with Switch Button */}
+                            <LoadingFunnyVibes variant="standard" />
                         </div>
 
                         <p className="text-xs text-slate-500 mt-12 leading-relaxed max-w-xs mx-auto">
