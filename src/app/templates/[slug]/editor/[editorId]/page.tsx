@@ -1,4 +1,5 @@
 "use client";
+// agent-notes: { ctx: "editor page with locked preview modal for non-paid users and plainly video preview orchestration", deps: ["src/lib/free-previews.ts"], state: active, last: "sato@2026-08-26" }
 
 /* eslint-disable @next/next/no-img-element */
 /* eslint-disable react-hooks/exhaustive-deps */
@@ -13,7 +14,7 @@ import {
     Loader2, Sparkles, Upload, X, Crop as CropIcon, Check,
     ZoomIn, ZoomOut, RotateCcw, Move, RefreshCw, Eye, Crown, AlertTriangle,
     XCircle, Edit3, Maximize2, Minimize2, Zap, ArrowRight, ShieldCheck, CheckCircle2, CreditCard,
-    Search, Clock, Layers
+    Search, Clock, Layers, Lock
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -134,6 +135,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
     const [freeBgRemovalsRemaining, setFreeBgRemovalsRemaining] = useState<number | null>(null);
     const [showBgMenu, setShowBgMenu] = useState<string | null>(null);
     const [showPurchasePopup, setShowPurchasePopup] = useState(false);
+    const [showPreviewLockedModal, setShowPreviewLockedModal] = useState(false);
     const [sidebarFilter, setSidebarFilter] = useState<"all" | "images" | "texts">("all");
     const [sidebarSearch, setSidebarSearch] = useState<string>("");
     const sidebarItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1063,6 +1065,11 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
             return;
         }
 
+        if (!subscription?.hasPaidSubscription) {
+            setShowPreviewLockedModal(true);
+            return;
+        }
+
         setIsRendering(true);
 
         try {
@@ -1665,20 +1672,34 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                 </div>
                                 <h3 className="text-2xl font-bold text-slate-900 mb-2">Are you sure?</h3>
                                 <p className="text-slate-650 text-sm">
-                                    HD Renders consume credits. We highly recommend generating a <strong className="text-slate-900">Free Preview</strong> first to verify your work.
+                                    {subscription?.hasPaidSubscription
+                                        ? <>HD Renders consume credits. We highly recommend generating a <strong className="text-slate-900">Preview</strong> first to verify your work.</>
+                                        : <>HD Renders consume credits. Free users can use their welcome credits to render in HD.</>}
                                 </p>
                             </div>
 
                             <div className="flex flex-col sm:flex-row gap-3">
-                                <button
-                                    onClick={() => {
-                                        setShowRenderConfirm(false);
-                                        handleFreePreview();
-                                    }}
-                                    className="flex-1 px-6 py-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold rounded-xl transition-all"
-                                >
-                                    Free Preview
-                                </button>
+                                {subscription?.hasPaidSubscription ? (
+                                    <button
+                                        onClick={() => {
+                                            setShowRenderConfirm(false);
+                                            handleFreePreview();
+                                        }}
+                                        className="flex-1 px-6 py-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold rounded-xl transition-all"
+                                    >
+                                        Preview
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => {
+                                            setShowRenderConfirm(false);
+                                            setShowPreviewLockedModal(true);
+                                        }}
+                                        className="flex-1 px-6 py-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-850 font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-1.5"
+                                    >
+                                        <Lock className="w-3.5 h-3.5 text-amber-600" /> Upgrade for Previews
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => {
                                         setShowRenderConfirm(false);
@@ -1687,6 +1708,120 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                                     className="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.3)] transition-all flex items-center justify-center gap-2"
                                 >
                                     <Download className="w-4 h-4" /> Render HD
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ── Aesthetic Unlimited Free Preview Locked Alert Popup ─────────────────────────────────── */}
+            <AnimatePresence>
+                {showPreviewLockedModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4"
+                        onClick={() => setShowPreviewLockedModal(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.92, y: 24 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.92, y: 24 }}
+                            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                            className="relative w-full max-w-md bg-gradient-to-b from-[#14172a] to-[#0a0c16] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-[0_0_80px_rgba(99,102,241,0.35)] text-white overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Background ambient glow */}
+                            <div className="absolute -top-24 -left-24 w-72 h-72 bg-gradient-to-br from-amber-500/20 via-indigo-500/20 to-purple-500/20 rounded-full blur-3xl pointer-events-none" />
+                            <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-gradient-to-tl from-indigo-500/15 via-rose-500/15 to-transparent rounded-full blur-3xl pointer-events-none" />
+
+                            {/* Close Button */}
+                            <button
+                                onClick={() => setShowPreviewLockedModal(false)}
+                                className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors border border-white/5"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+
+                            {/* Header & Icon */}
+                            <div className="flex flex-col items-center text-center relative z-10 mb-5">
+                                <div className="relative mb-4">
+                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500/20 via-rose-500/20 to-indigo-500/20 border border-amber-500/30 flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.3)]">
+                                        <Lock className="w-8 h-8 text-amber-400" />
+                                    </div>
+                                    <div className="absolute -top-1.5 -right-2 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-rose-500 text-[10px] font-black uppercase tracking-wider text-white shadow-sm flex items-center gap-0.5">
+                                        <Crown className="w-2.5 h-2.5" /> PRO ONLY
+                                    </div>
+                                </div>
+
+                                <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white mb-2">
+                                    Unlimited Previews is Locked
+                                </h3>
+                                <p className="text-xs sm:text-sm text-gray-300 max-w-sm leading-relaxed">
+                                    Instant, fast video draft previews are exclusively available for <strong className="text-amber-300 font-semibold">paid subscription members</strong>.
+                                </p>
+                            </div>
+
+                            {/* Value Features */}
+                            <div className="w-full space-y-2.5 mb-6 relative z-10">
+                                <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
+                                    <div className="w-8 h-8 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+                                        <Eye className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-white">Unlimited Instant Previews</p>
+                                        <p className="text-[11px] text-gray-400">Generate fast draft previews for any template before rendering</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
+                                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                                        <Sparkles className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-white">Use Welcome Credits for Full HD</p>
+                                        <p className="text-[11px] text-gray-400">
+                                            Free users can use their welcome credits to render in 1080p HD directly!
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex flex-col gap-2.5 relative z-10">
+                                <button
+                                    onClick={() => {
+                                        setShowPreviewLockedModal(false);
+                                        router.push("/pricing");
+                                    }}
+                                    className="w-full py-3 px-5 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-[0_0_25px_rgba(99,102,241,0.4)] transition-all flex items-center justify-center gap-2 text-sm"
+                                >
+                                    <Crown className="w-4 h-4 text-amber-300" />
+                                    Unlock Unlimited Previews
+                                    <ArrowRight className="w-4 h-4" />
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowPreviewLockedModal(false);
+                                        const templateCost = template?.credit_cost || 20;
+                                        const userRemainingCredits = subscription?.subscription?.rendersRemaining ?? 0;
+                                        const isUnlimited = subscription?.hasSubscription && subscription?.plan?.renderLimit === null;
+                                        const hasEnoughCredits = isUnlimited || (
+                                            (subscription?.hasSubscription || (subscription?.hasExpiredCredits && subscription?.expiredCredits)) &&
+                                            userRemainingCredits >= templateCost
+                                        );
+
+                                        if (hasEnoughCredits) {
+                                            setShowRenderConfirm(true);
+                                        } else {
+                                            setShowPurchasePopup(true);
+                                        }
+                                    }}
+                                    className="w-full py-2.5 px-4 bg-white/10 hover:bg-white/15 border border-white/10 text-gray-300 hover:text-white font-semibold rounded-xl transition-all text-xs flex items-center justify-center gap-1.5"
+                                >
+                                    <Download className="w-3.5 h-3.5" />
+                                    Render in Full HD with Credits
                                 </button>
                             </div>
                         </motion.div>
@@ -1856,26 +1991,6 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                 </div>
 
                 <div className="flex items-center gap-2 md:gap-3">
-                    {/* Preview Tracker for Free & Welcome Gift Users */}
-                    {!subscription?.hasPaidSubscription && subscription?.subscription?.previewLimit && (
-                        <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
-                            <div className="flex flex-col items-end">
-                                <span className="text-[9px] font-bold text-slate-500 uppercase leading-none mb-1">Free Previews</span>
-                                <span className="text-[10px] font-bold text-slate-900 leading-none">
-                                    {subscription.subscription.previewsUsed} / {subscription.subscription.previewLimit}
-                                </span>
-                            </div>
-                            <div className="w-16 h-1 bg-slate-200 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full rounded-full transition-all ${Number(subscription.subscription.previewPercent) >= 90 ? 'bg-red-500' :
-                                        Number(subscription.subscription.previewPercent) >= 70 ? 'bg-amber-500' : 'bg-indigo-500'
-                                        }`}
-                                    style={{ width: `${Math.min(Number(subscription.subscription.previewPercent), 100)}%` }}
-                                />
-                            </div>
-                        </div>
-                    )}
-
                     <button
                         onClick={() => handleSave()}
                         disabled={isSaving}
@@ -1884,33 +1999,39 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" /> : <Save className="w-4 h-4" />}
                         {isSaving ? "Saving..." : "Save"}
                     </button>
-                    <button
-                        onClick={() => {
-                            if (!subscription?.hasPaidSubscription && subscription?.warnings?.previewsExhausted) {
-                                toast.error("Free preview limit reached. Upgrade for unlimited previews!");
-                                router.push("/pricing");
-                                return;
-                            }
-                            handleFreePreview();
-                        }}
-                        disabled={isRendering || uploadingKeys.size > 0}
-                        className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-800 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shrink-0"
-                        title={
-                            subscription?.hasPaidSubscription
-                                ? "Preview your edits (Unlimited)"
-                                : subscription?.warnings?.previewsExhausted
-                                    ? "Preview limit reached. Upgrade to continue."
-                                    : `Preview your edits (${subscription?.subscription?.previewsUsed}/${subscription?.subscription?.previewLimit} used)`
-                        }
-                    >
-                        {isRendering ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
-                        ) : (
-                            <Eye className="w-4 h-4" />
-                        )}
-                        <span className="hidden xs:inline">Free Preview</span>
-                        <span className="xs:hidden">Preview</span>
-                    </button>
+                    {subscription?.hasPaidSubscription ? (
+                        <button
+                            onClick={() => handleFreePreview()}
+                            disabled={isRendering || uploadingKeys.size > 0}
+                            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-800 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shrink-0"
+                            title="Preview your edits (Unlimited for subscribers)"
+                        >
+                            {isRendering ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+                            ) : (
+                                <Eye className="w-4 h-4" />
+                            )}
+                            <span className="hidden xs:inline">Preview</span>
+                            <span className="xs:hidden">Preview</span>
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => setShowPreviewLockedModal(true)}
+                            disabled={isRendering}
+                            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 border border-amber-500/30 hover:border-amber-500/60 text-slate-800 hover:text-indigo-900 rounded-lg text-xs sm:text-sm font-semibold transition-all shadow-sm group shrink-0"
+                            title="Unlimited free video preview is locked for free users. Click to unlock!"
+                        >
+                            <div className="relative flex items-center justify-center">
+                                <Eye className="w-4 h-4 text-slate-600 group-hover:text-indigo-600 transition-colors" />
+                                <Lock className="w-2.5 h-2.5 text-amber-600 absolute -bottom-1 -right-1" />
+                            </div>
+                            <span className="hidden xs:inline font-medium">Preview</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 font-bold border border-amber-500/30 flex items-center gap-0.5">
+                                <Lock className="w-2.5 h-2.5" /> PRO
+                            </span>
+                            <span className="xs:hidden"><Lock className="w-3 h-3 text-amber-600" /></span>
+                        </button>
+                    )}
                     <button
                         onClick={() => {
                             const templateCost = template?.credit_cost || 20;
@@ -2111,7 +2232,7 @@ export default function Editor({ params }: { params: Promise<{ slug: string; edi
                             </AnimatePresence>
                             {/* ── Label ── */}
                             <div className="absolute top-4 left-4 text-[10px] font-mono text-slate-400 z-10">
-                                {previewStatus === "completed" ? "FREE PREVIEW" : "TEMPLATE PREVIEW"}
+                                {previewStatus === "completed" ? "PREVIEW DRAFT" : "TEMPLATE PREVIEW"}
                             </div>
                         </div>
 

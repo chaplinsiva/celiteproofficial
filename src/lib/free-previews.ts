@@ -1,6 +1,6 @@
-// agent-notes: { ctx: "Free preview calculations and limit configuration for free and welcome gift users", deps: [], state: active, last: "sato@2026-08-24" }
+// agent-notes: { ctx: "Free preview calculations - free previews disabled for non-paid users", deps: [], state: active, last: "sato@2026-08-26" }
 
-export const DEFAULT_FREE_PREVIEWS_LIMIT = 10;
+export const DEFAULT_FREE_PREVIEWS_LIMIT = 0;
 
 export interface FreePreviewsStatus {
     previewLimit: number;
@@ -12,12 +12,23 @@ export interface FreePreviewsStatus {
 }
 
 /**
- * Calculates the preview usage status for a user based on the 10 free previews limit.
+ * Calculates the preview usage status for a user (free previews disabled for free tier).
  */
 export function calculateFreePreviewsStatus(
     freePreviewsRemaining: number | null | undefined,
     limit: number = DEFAULT_FREE_PREVIEWS_LIMIT
 ): FreePreviewsStatus {
+    if (limit <= 0) {
+        return {
+            previewLimit: 0,
+            remainingPreviews: 0,
+            previewsUsed: 0,
+            previewPercent: "0.0",
+            previewsNearLimit: false,
+            previewsExhausted: true
+        };
+    }
+
     const remaining = freePreviewsRemaining === null || freePreviewsRemaining === undefined
         ? limit
         : Math.max(0, freePreviewsRemaining);

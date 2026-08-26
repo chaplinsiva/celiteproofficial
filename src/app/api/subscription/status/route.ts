@@ -97,6 +97,8 @@ export async function GET(request: NextRequest) {
 
             return NextResponse.json({
                 hasSubscription: false,
+                hasPaidSubscription: false,
+                hasUnlimitedPreviews: false,
                 isFreeUser: true,
                 isExpired: false,
                 freeBgRemovalsRemaining,

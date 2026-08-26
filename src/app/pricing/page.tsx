@@ -381,11 +381,11 @@ export default function PricingPage() {
                     </div>
                 </div>
 
-                {/* Free Previews Note */}
+                {/* Previews Note */}
                 <div className="text-center mt-12 p-6 bg-gradient-to-r from-slate-100/80 via-white to-slate-100/80 border border-slate-200 rounded-3xl max-w-2xl mx-auto shadow-sm">
                     <p className="text-slate-600 text-xs sm:text-sm font-medium">
-                        <span className="text-slate-950 font-bold">✨ Free previews available on all templates!</span>{" "}
-                        Customize text and photos in our live editor before subscribing. Free users get 3 daily AI background removals.
+                        <span className="text-slate-950 font-bold">✨ Unlimited instant previews with all paid plans!</span>{" "}
+                        Free users receive welcome credits to render in full HD. Customize templates directly in our live editor.
                     </p>
                 </div>
             </div>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkSupabaseConfig, supabaseAdmin, getOrResetFreePreviews, getAuthenticatedUser } from "@/lib/supabase-admin";
+import { checkSupabaseConfig, supabaseAdmin, getAuthenticatedUser } from "@/lib/supabase-admin";
 import { processRenderJob } from "@/lib/render-processor";
 
 
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check subscription — only PAID subscribers get unlimited sample renders. Welcome Gift users and free users use the free preview limit.
+        // Check subscription — only PAID subscribers get sample renders (unlimited). Free and Welcome Gift users cannot generate sample renders.
         const { data: activeSubs } = await supabaseAdmin
             .from("user_subscriptions")
             .select("id, status, valid_until, plan:subscription_plans(name, price_monthly)")
@@ -70,28 +70,10 @@ export async function POST(request: NextRequest) {
         );
 
         if (!hasPaidSubscription) {
-            // Get or reset free previews dynamically from profiles
-            const profile = await getOrResetFreePreviews(userId);
-            const remainingPreviews = profile?.free_previews_remaining ?? 10;
-
-            const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-
-            // Also count currently-active sampling jobs to prevent race condition
-            const { data: activeSamples } = await supabaseAdmin
-                .from("render_jobs")
-                .select("id")
-                .eq("user_id", userId)
-                .in("status", ["sampling", "processing"])
-                .gte("created_at", fifteenMinutesAgo);
-
-            const activeCount = activeSamples?.length || 0;
-
-            if (remainingPreviews - activeCount <= 0) {
-                return NextResponse.json(
-                    { error: "Free preview limit reached. Please upgrade to a paid subscription for unlimited previews and HD renders." },
-                    { status: 403 }
-                );
-            }
+            return NextResponse.json(
+                { error: "Free preview is only available for paid subscription members. Free users can use their welcome credits for HD renders." },
+                { status: 403 }
+            );
         }
 
         // ── Idempotency guard: prevent duplicate sample renders on refresh ──
